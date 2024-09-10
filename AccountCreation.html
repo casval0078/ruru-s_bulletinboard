@@ -8,18 +8,20 @@
     // Firebaseの初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-    authDomain: "nou-no-circle.firebaseapp.com",
-    projectId: "nou-no-circle",
-    storageBucket: "nou-no-circle.appspot.com",
-    messagingSenderId: "756338805186",
-    appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-    measurementId: "G-TWBV38P13D"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
+      authDomain: "nou-no-circle.firebaseapp.com",
+      projectId: "nou-no-circle",
+      storageBucket: "nou-no-circle.appspot.com",
+      messagingSenderId: "756338805186",
+      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
+      measurementId: "G-TWBV38P13D"
+    };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
     // 8桁のランダムな英数字を生成する関数
     function generatePassword() {
@@ -37,25 +39,25 @@
         e.preventDefault();
         const username = document.getElementById("username").value; // ユーザー名を取得
         const email = document.getElementById("email").value;
-        const docRef = doc(db, "users", email);
-        const docSnap = await getDoc(docRef);
 
-        if (docSnap.exists()) {
-          document.getElementById("result").innerText = "そのメールアドレスは既に登録されています。";
-        } else {
-          const password = generatePassword();
-          try {
-            await setDoc(doc(db, "users", email), {
-              email: email,
-              username: username, // ユーザー名を保存
-              password: password,
-              role: 'user' // 権限を「ユーザー」に設定
-            });
-            document.getElementById("result").innerText = "アカウントが作成されました！";
-          } catch (error) {
-            console.error("アカウント作成エラー: ", error);
-            document.getElementById("result").innerText = "アカウント作成に失敗しました。";
-          }
+        // Firestore と Firebase Authentication にユーザーを登録する処理
+        const password = generatePassword();
+        try {
+          // Firebase Authentication でユーザーを作成
+          await createUserWithEmailAndPassword(auth, email, password);
+
+          // Firestore にユーザー情報を保存
+          await setDoc(doc(db, "users", email), {
+            email: email,
+            username: username, // ユーザー名を保存
+            password: password,
+            role: 'user' // 権限を「ユーザー」に設定
+          });
+
+          document.getElementById("result").innerText = "アカウントが作成されました！";
+        } catch (error) {
+          console.error("アカウント作成エラー: ", error);
+          document.getElementById("result").innerText = "アカウント作成に失敗しました: " + error.message;
         }
       });
     });
@@ -70,7 +72,6 @@
     <label for="email">メールアドレス:</label>
     <input type="email" id="email" required><br>
     
-
     <button type="submit">送信</button>
   </form>
   <p id="result"></p>
