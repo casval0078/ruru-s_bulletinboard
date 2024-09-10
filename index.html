@@ -37,7 +37,7 @@
 
           // Firestoreからユーザーのロールを取得
           const user = auth.currentUser;
-          const userDocRef = doc(db, "users", user.uid);
+          const userDocRef = doc(db, "users", email); // FirestoreドキュメントIDとしてメールアドレスを使用
           const userDoc = await getDoc(userDocRef);
 
           if (userDoc.exists()) {
