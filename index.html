@@ -8,18 +8,21 @@
     // Firebaseの初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
     import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-    authDomain: "nou-no-circle.firebaseapp.com",
-    projectId: "nou-no-circle",
-    storageBucket: "nou-no-circle.appspot.com",
-    messagingSenderId: "756338805186",
-    appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-    measurementId: "G-TWBV38P13D"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
+      authDomain: "nou-no-circle.firebaseapp.com",
+      projectId: "nou-no-circle",
+      storageBucket: "nou-no-circle.appspot.com",
+      messagingSenderId: "756338805186",
+      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
+      measurementId: "G-TWBV38P13D"
+    };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
     // ログインフォームの送信時の処理
     document.addEventListener("DOMContentLoaded", () => {
@@ -28,24 +31,28 @@
         const email = document.getElementById("email").value;
         const password = document.getElementById("password").value;
 
-        // Firestoreでメールアドレスとパスワードを確認
-        const docRef = doc(db, "users", email);
-        const docSnap = await getDoc(docRef);
+        try {
+          // Firebase Authenticationでログイン
+          await signInWithEmailAndPassword(auth, email, password);
 
-        if (docSnap.exists()) {
-          const userData = docSnap.data();
-          if (userData.password === password) {
-            // ロールに応じてページをリダイレクト
+          // Firestoreからユーザーのロールを取得
+          const user = auth.currentUser;
+          const userDocRef = doc(db, "users", user.uid);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
             if (userData.role === 'admin') {
               window.location.href = 'admin_dashboard.html'; // 管理者ページに移動
             } else if (userData.role === 'user') {
               window.location.href = 'user_dashboard.html'; // ユーザーページに移動
             }
           } else {
-            document.getElementById("result").innerText = "パスワードが間違っています。";
+            document.getElementById("result").innerText = "ユーザー情報が見つかりません。";
           }
-        } else {
-          document.getElementById("result").innerText = "そのメールアドレスは登録されていません。";
+        } catch (error) {
+          console.error("ログインに失敗しました", error);
+          document.getElementById("result").innerText = "ログインに失敗しました。";
         }
       });
     });
