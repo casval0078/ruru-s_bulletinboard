@@ -67,10 +67,13 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-        // 右クリックと長タップの禁止
+    // 右クリックと長タップの禁止
     function preventDefaultActions(event) {
       event.preventDefault();
     }
+
+    document.addEventListener("contextmenu", preventDefaultActions);
+    document.addEventListener("touchstart", preventDefaultActions);
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {
