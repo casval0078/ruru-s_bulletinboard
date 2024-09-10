@@ -6,7 +6,8 @@
   <title>ユーザーダッシュボード</title>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, collection, query, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, collection, query, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
@@ -19,6 +20,23 @@
   };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    let currentUsername = '';
+
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDocRef = doc(db, `users/${user.uid}`);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          currentUsername = userDoc.data().username;
+        } else {
+          console.error("ユーザー情報が見つかりません");
+        }
+      } else {
+        window.location.href = 'login.html'; // ログインしていない場合はログインページにリダイレクト
+      }
+    });
 
     const postsQuery = query(collection(db, "posts"));
     onSnapshot(postsQuery, (snapshot) => {
@@ -40,6 +58,7 @@
             <p><strong>${post.username}</strong> さんの投稿 (${date})</p>
             ${mediaElement}
             <p>コメント: ${post.comment}</p>
+            <div id="comments-${doc.id}"></div>
             <form class="commentForm" data-post-id="${doc.id}">
               <input type="text" placeholder="コメントを書く" required>
               <button type="submit">送信</button>
@@ -47,6 +66,18 @@
           </div>
         `;
         postsContainer.innerHTML += postElement;
+
+        // コメント表示
+        const commentsContainer = document.getElementById(`comments-${doc.id}`);
+        const commentsQuery = query(collection(db, `posts/${doc.id}/comments`));
+        onSnapshot(commentsQuery, (commentsSnapshot) => {
+          commentsContainer.innerHTML = "";
+          commentsSnapshot.forEach((commentDoc) => {
+            const comment = commentDoc.data();
+            const commentElement = `<p><strong>${comment.username}</strong>: ${comment.comment}</p>`;
+            commentsContainer.innerHTML += commentElement;
+          });
+        });
       });
     });
 
@@ -58,7 +89,7 @@
 
         await addDoc(collection(db, `posts/${postId}/comments`), {
           comment: comment,
-          username: "ユーザー", // 実際にはFirestoreから取得
+          username: currentUsername,
           timestamp: serverTimestamp(),
         });
 
@@ -72,6 +103,6 @@
   <h1>ユーザーダッシュボード</h1>
 
   <h2>投稿一覧</h2>
-  <div id="posts"></div> <!-- 投稿がここに表示される -->
+  <div id="posts"></div>
 </body>
 </html>
