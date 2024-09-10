@@ -9,7 +9,7 @@
     img {
       pointer-events: none; /* 画像の右クリックを無効化 */
     }
-    
+
     /* コメントのスタイリング */
     .comment-section {
       margin-top: 10px;
@@ -92,16 +92,15 @@
 
           posts.forEach(post => {
             const postElement = document.createElement("div");
+            postElement.className = "post";
             postElement.innerHTML = `
-              <div class="post">
-                <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
-                <p>${post.comment}</p>
-                ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}" style="max-width: 100%;"></video>` : `<img src="${post.fileUrl}" style="max-width: 100%;">`) : ""}
-                <div class="comment-section">
-                  <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
-                  <button onclick="submitComment('${post.id}')">コメントする</button>
-                  <div id="comments-${post.id}"></div>
-                </div>
+              <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>${post.comment}</p>
+              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}" style="max-width: 100%;"></video>` : `<img src="${post.fileUrl}" style="max-width: 100%;">`) : ""}
+              <div class="comment-section">
+                <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
+                <button onclick="submitComment('${post.id}')">コメントする</button>
+                <div id="comments-${post.id}"></div>
               </div>
             `;
             postsContainer.appendChild(postElement);
