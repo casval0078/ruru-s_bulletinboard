@@ -10,6 +10,8 @@
     }
     .post {
       margin-bottom: 20px;
+      border: 1px solid #ddd;
+      padding: 10px;
     }
     .post img, .post video {
       max-width: 100%;
@@ -18,7 +20,7 @@
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, onSnapshot, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
     import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
@@ -104,6 +106,16 @@
           const postElement = document.createElement('div');
           postElement.className = 'post';
           
+          // ユーザー名と投稿日時
+          const usernameElement = document.createElement('p');
+          usernameElement.textContent = `ユーザー: ${postData.username}`;
+          postElement.appendChild(usernameElement);
+
+          const timestampElement = document.createElement('p');
+          const timestamp = postData.timestamp.toDate(); // FirestoreのTimestampをDateオブジェクトに変換
+          timestampElement.textContent = `投稿日: ${timestamp.getFullYear()}-${timestamp.getMonth() + 1}-${timestamp.getDate()} ${timestamp.getHours()}:${timestamp.getMinutes()}`;
+          postElement.appendChild(timestampElement);
+
           const commentElement = document.createElement('p');
           commentElement.textContent = postData.comment;
 
