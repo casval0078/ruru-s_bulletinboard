@@ -6,106 +6,122 @@
   <title>管理者ダッシュボード</title>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-    authDomain: "nou-no-circle.firebaseapp.com",
-    projectId: "nou-no-circle",
-    storageBucket: "nou-no-circle.appspot.com",
-    messagingSenderId: "756338805186",
-    appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-    measurementId: "G-TWBV38P13D"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
+      authDomain: "nou-no-circle.firebaseapp.com",
+      projectId: "nou-no-circle",
+      storageBucket: "nou-no-circle.appspot.com",
+      messagingSenderId: "756338805186",
+      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
+      measurementId: "G-TWBV38P13D"
+    };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const storage = getStorage(app);
     const auth = getAuth(app);
 
-    let currentUsername = '';
-
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userDocRef = doc(db, `users/${user.uid}`);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          currentUsername = userDoc.data().username;
-        } else {
-          console.error("ユーザー情報が見つかりません");
+    document.addEventListener("DOMContentLoaded", () => {
+      // ユーザーの認証状態を確認
+      onAuthStateChanged(auth, (user) => {
+        if (!user) {
+          window.location.href = 'index.html'; // ログイン画面にリダイレクト
         }
-      } else {
-        window.location.href = 'index.html'; // ログインしていない場合はログインページにリダイレクト
-      }
-    });
-
-    document.getElementById("uploadForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const file = document.getElementById("file").files[0];
-      const comment = document.getElementById("comment").value;
-      const storageRef = ref(storage, `uploads/${file.name}`);
-      
-      try {
-        const snapshot = await uploadBytes(storageRef, file);
-        const fileUrl = await getDownloadURL(snapshot.ref);
-
-        await addDoc(collection(db, "posts"), {
-          username: currentUsername,
-          fileUrl: fileUrl,
-          fileType: file.type,
-          comment: comment,
-          timestamp: serverTimestamp(),
-        });
-
-        document.getElementById("result").innerText = "ファイルがアップロードされました。";
-      } catch (error) {
-        document.getElementById("result").innerText = "アップロードに失敗しました。";
-      }
-    });
-
-    const postsQuery = query(collection(db, "posts"));
-    onSnapshot(postsQuery, (snapshot) => {
-      const postsContainer = document.getElementById("posts");
-      postsContainer.innerHTML = "";
-      snapshot.forEach((doc) => {
-        const post = doc.data();
-        const date = post.timestamp ? new Date(post.timestamp.seconds * 1000).toLocaleString() : "日時不明";
-        
-        let mediaElement = "";
-        if (post.fileType.startsWith("image/")) {
-          mediaElement = `<img src="${post.fileUrl}" alt="投稿画像" width="300">`;
-        } else if (post.fileType.startsWith("video/")) {
-          mediaElement = `<video src="${post.fileUrl}" controls width="300"></video>`;
-        }
-
-        const postElement = `
-          <div class="post">
-            <p><strong>${post.username}</strong> さんの投稿 (${date})</p>
-            ${mediaElement}
-            <p>コメント: ${post.comment}</p>
-          </div>
-        `;
-        postsContainer.innerHTML += postElement;
       });
-    });
 
+      document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const fileInput = document.getElementById("file");
+        const file = fileInput.files[0];
+
+        if (!file) {
+          alert("ファイルが選択されていません。");
+          return;
+        }
+
+        try {
+          const storageRef = ref(storage, `uploads/${file.name}`);
+          await uploadBytes(storageRef, file);
+          const fileURL = await getDownloadURL(storageRef);
+
+          // Firestoreにファイル情報を保存
+          const user = auth.currentUser;
+          await addDoc(collection(db, "posts"), {
+            user: user.email,
+            timestamp: new Date(),
+            fileURL: fileURL,
+            fileType: file.type
+          });
+
+          // フィードを更新
+          loadPosts();
+
+          document.getElementById("result").innerText = "ファイルがアップロードされました！";
+        } catch (error) {
+          console.error("アップロードエラー: ", error);
+          document.getElementById("result").innerText = "ファイルのアップロードに失敗しました。";
+        }
+      });
+
+      async function loadPosts() {
+        const postsRef = collection(db, "posts");
+        const q = query(postsRef, orderBy("timestamp", "desc"));
+        const querySnapshot = await getDocs(q);
+
+        const postsContainer = document.getElementById("posts");
+        postsContainer.innerHTML = ""; // 既存の投稿をクリア
+
+        querySnapshot.forEach((doc) => {
+          const postData = doc.data();
+          const fileURL = postData.fileURL;
+          const fileType = postData.fileType;
+          const user = postData.user;
+          const timestamp = postData.timestamp.toDate().toLocaleString();
+
+          let content = "";
+
+          if (fileType.startsWith("image/")) {
+            content = `<img src="${fileURL}" alt="Uploaded Image" style="max-width: 100%;"/>`;
+          } else if (fileType.startsWith("video/")) {
+            content = `<video controls style="max-width: 100%;">
+                        <source src="${fileURL}" type="${fileType}">
+                        Your browser does not support the video tag.
+                      </video>`;
+          }
+
+          postsContainer.innerHTML += `
+            <div class="post">
+              <p><strong>${user}</strong> (${timestamp})</p>
+              ${content}
+              <p><strong>コメント:</strong></p>
+              <textarea class="comment" placeholder="コメントを入力してください"></textarea>
+              <button class="comment-btn">コメントする</button>
+            </div>
+          `;
+        });
+      }
+
+      loadPosts(); // 初回ロード
+    });
   </script>
+  <style>
+    .post { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }
+    .comment { width: 100%; height: 50px; }
+    .comment-btn { margin-top: 5px; }
+  </style>
 </head>
 <body>
   <h1>管理者ダッシュボード</h1>
-
   <form id="uploadForm">
-    <label for="file">ファイルを選択:</label>
-    <input type="file" id="file" accept="image/*,video/*" required><br>
-    <label for="comment">コメント:</label>
-    <input type="text" id="comment" required><br>
-    <button type="submit">投稿</button>
+    <label for="file">ファイル:</label>
+    <input type="file" id="file" required><br>
+    <button type="submit">アップロード</button>
   </form>
-
   <p id="result"></p>
-
-  <h2>投稿一覧</h2>
   <div id="posts"></div>
 </body>
 </html>
