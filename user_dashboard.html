@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ユーザーダッシュボード</title>
+  <title>閲覧専用ページ</title>
+  <style>
+    /* 前と同じスタイル */
+  </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, collection, query, onSnapshot, addDoc, serverTimestamp, doc, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
-  const firebaseConfig = {
+      const firebaseConfig = {
     apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
     authDomain: "nou-no-circle.firebaseapp.com",
     projectId: "nou-no-circle",
@@ -18,91 +21,89 @@
     appId: "1:756338805186:web:cb740e035ac611b5baae5b",
     measurementId: "G-TWBV38P13D"
   };
+
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    let currentUsername = '';
-
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const userDocRef = doc(db, `users/${user.uid}`);
-        const userDoc = await getDoc(userDocRef);
-        if (userDoc.exists()) {
-          currentUsername = userDoc.data().username;
-        } else {
-          console.error("ユーザー情報が見つかりません");
-        }
-      } else {
-        window.location.href = 'index.html'; // ログインしていない場合はログインページにリダイレクト
-      }
-    });
+        async function loadPosts() {
+          const postsCollection = collection(db, "posts");
+          const postsSnapshot = await getDocs(postsCollection);
+          const postsContainer = document.getElementById("postsContainer");
+          postsContainer.innerHTML = '';
 
-    const postsQuery = query(collection(db, "posts"));
-    onSnapshot(postsQuery, (snapshot) => {
-      const postsContainer = document.getElementById("posts");
-      postsContainer.innerHTML = "";
-      snapshot.forEach((doc) => {
-        const post = doc.data();
-        const date = post.timestamp ? new Date(post.timestamp.seconds * 1000).toLocaleString() : "日時不明";
-        
-        let mediaElement = "";
-        if (post.fileType.startsWith("image/")) {
-          mediaElement = `<img src="${post.fileUrl}" alt="投稿画像" width="300">`;
-        } else if (post.fileType.startsWith("video/")) {
-          mediaElement = `<video src="${post.fileUrl}" controls width="300"></video>`;
-        }
+          const posts = postsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
 
-        const postElement = `
-          <div class="post">
-            <p><strong>${post.username}</strong> さんの投稿 (${date})</p>
-            ${mediaElement}
-            <p>コメント: ${post.comment}</p>
-            <div id="comments-${doc.id}"></div>
-            <form class="commentForm" data-post-id="${doc.id}">
-              <input type="text" placeholder="コメントを書く" required>
-              <button type="submit">送信</button>
-            </form>
-          </div>
-        `;
-        postsContainer.innerHTML += postElement;
+          posts.forEach(post => {
+            const postElement = document.createElement("div");
+            postElement.classList.add("post");
+            postElement.innerHTML = `
+              <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>${post.comment}</p>
+              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}"></video>` : `<img src="${post.fileUrl}">`) : ""}
+              <div class="comment-section">
+                <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
+                <button onclick="submitComment('${post.id}')">コメントする</button>
+                <div id="comments-${post.id}"></div>
+              </div>
+            `;
+            postsContainer.appendChild(postElement);
 
-        // コメント表示
-        const commentsContainer = document.getElementById(`comments-${doc.id}`);
-        const commentsQuery = query(collection(db, `posts/${doc.id}/comments`));
-        onSnapshot(commentsQuery, (commentsSnapshot) => {
-          commentsContainer.innerHTML = "";
-          commentsSnapshot.forEach((commentDoc) => {
-            const comment = commentDoc.data();
-            const commentElement = `<p><strong>${comment.username}</strong>: ${comment.comment}</p>`;
-            commentsContainer.innerHTML += commentElement;
+            loadComments(post.id);
           });
-        });
-      });
-    });
+        }
 
-    document.addEventListener("submit", async (e) => {
-      if (e.target.classList.contains("commentForm")) {
-        e.preventDefault();
-        const comment = e.target.querySelector("input").value;
-        const postId = e.target.getAttribute("data-post-id");
+        async function loadComments(postId) {
+          const commentsCollection = collection(db, "posts", postId, "comments");
+          const commentsSnapshot = await getDocs(commentsCollection);
+          const commentsContainer = document.getElementById(`comments-${postId}`);
+          commentsContainer.innerHTML = '';
 
-        await addDoc(collection(db, `posts/${postId}/comments`), {
-          comment: comment,
-          username: currentUsername,
-          timestamp: serverTimestamp(),
-        });
+          commentsSnapshot.forEach(commentDoc => {
+            const commentData = commentDoc.data();
+            const commentElement = document.createElement("div");
+            commentElement.classList.add("comment");
+            commentElement.innerHTML = `
+              <p class="comment-header"><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>${commentData.comment}</p>
+            `;
+            commentsContainer.appendChild(commentElement);
+          });
+        }
 
-        e.target.querySelector("input").value = ""; // フォームをリセット
+        window.submitComment = async function(postId) {
+          const commentTextarea = document.getElementById(`comment-${postId}`);
+          const comment = commentTextarea.value;
+          const userDoc = await getDoc(doc(db, "users", user.email));
+          const commentData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+          };
+
+          try {
+            await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
+            commentTextarea.value = '';
+            loadComments(postId);
+          } catch (error) {
+            console.error("コメント投稿エラー: ", error);
+          }
+        };
+
+        loadPosts();
+      } else {
+        window.location.href = 'index.html'; 
       }
     });
-
   </script>
 </head>
 <body>
-  <h1>ユーザーダッシュボード</h1>
-
-  <h2>投稿一覧</h2>
-  <div id="posts"></div>
+  <h1>閲覧専用ページ</h1>
+  <div id="postsContainer"></div>
 </body>
 </html>
