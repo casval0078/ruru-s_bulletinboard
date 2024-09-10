@@ -48,10 +48,14 @@
           const comment = document.getElementById("comment").value;
           const fileInput = document.getElementById("file");
           const file = fileInput.files[0];
+          const userDocRef = doc(db, "users", user.uid); // UID を使用してユーザー情報を取得
+          const userDoc = await getDoc(userDocRef);
+          const userData = userDoc.exists() ? userDoc.data() : { username: "Unknown" };
+
           const postData = {
             comment: comment,
             timestamp: new Date(),
-            username: (await (await getDoc(doc(db, "users", user.email))).data()).username,
+            username: userData.username,
           };
 
           if (file) {
