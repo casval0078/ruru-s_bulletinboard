@@ -3,11 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>管理者ダッシュボード</title>
+  <title>投稿画面</title>
+  <style>
+    /* CSSで画像の保存を禁止 */
+    img {
+      pointer-events: none; /* 画像の右クリックを無効化 */
+    }
+  </style>
   <script type="module">
+    // Firebaseの初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
-    import { getAuth } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
     import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
@@ -25,76 +32,81 @@
     const auth = getAuth(app);
     const storage = getStorage(app);
 
-    // 投稿フォームの送信処理
-    document.addEventListener("DOMContentLoaded", () => {
-      document.getElementById("postForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const comment = document.getElementById("comment").value;
-        const fileInput = document.getElementById("file");
-        const file = fileInput.files[0];
-        const user = auth.currentUser;
-        
-        if (user) {
+    // 右クリックと長タップを禁止する関数
+    function preventDefaultActions(event) {
+      event.preventDefault();
+    }
+
+    document.addEventListener("contextmenu", preventDefaultActions); // 右クリック禁止
+    document.addEventListener("touchstart", preventDefaultActions); // 長タップ禁止
+
+    // ログインユーザーを取得し、投稿機能を設定
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        document.getElementById("postForm").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const comment = document.getElementById("comment").value;
+          const fileInput = document.getElementById("file");
+          const file = fileInput.files[0];
+          const postData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: (await (await getDoc(doc(db, "users", user.email))).data()).username,
+          };
+
+          if (file) {
+            const fileRef = ref(storage, `posts/${file.name}`);
+            await uploadBytes(fileRef, file);
+            postData.fileUrl = await getDownloadURL(fileRef);
+          }
+
           try {
-            let fileUrl = "";
-            if (file) {
-              const storageRef = ref(storage, `posts/${file.name}`);
-              await uploadBytes(storageRef, file);
-              fileUrl = await getDownloadURL(storageRef);
-            }
-
-            const userDocRef = doc(db, "users", user.email);
-            const userDoc = await getDoc(userDocRef);
-            const username = userDoc.exists() ? userDoc.data().username : "Unknown";
-
-            await addDoc(collection(db, "posts"), {
-              comment: comment,
-              fileUrl: fileUrl,
-              username: username,
-              timestamp: new Date()
-            });
-
-            document.getElementById("result").innerText = "投稿が成功しました！";
-            document.getElementById("postForm").reset();
+            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+            document.getElementById("result").innerText = "投稿が完了しました。";
+            document.getElementById("comment").value = '';
+            fileInput.value = '';
+            loadPosts();
           } catch (error) {
             console.error("投稿エラー: ", error);
             document.getElementById("result").innerText = "投稿に失敗しました。";
           }
-        } else {
-          document.getElementById("result").innerText = "ログインが必要です。";
-        }
-      });
-
-      // 投稿のリアルタイム表示
-      const postsRef = collection(db, "posts");
-      const q = query(postsRef, orderBy("timestamp", "desc"));
-      onSnapshot(q, (snapshot) => {
-        const postsContainer = document.getElementById("posts");
-        postsContainer.innerHTML = "";
-        snapshot.forEach((doc) => {
-          const postData = doc.data();
-          const postElement = document.createElement("div");
-          postElement.innerHTML = `
-            <p><strong>${postData.username}</strong> - ${new Date(postData.timestamp.seconds * 1000).toLocaleString()}</p>
-            <p>${postData.comment}</p>
-            ${postData.fileUrl ? `<img src="${postData.fileUrl}" style="max-width: 100%;">` : ""}
-          `;
-          postsContainer.appendChild(postElement);
         });
-      });
+
+        async function loadPosts() {
+          const postsCollection = collection(db, "posts");
+          const postsSnapshot = await getDocs(postsCollection);
+          const postsContainer = document.getElementById("postsContainer");
+          postsContainer.innerHTML = '';
+
+          postsSnapshot.forEach(doc => {
+            const postData = doc.data();
+            const postElement = document.createElement("div");
+            postElement.innerHTML = `
+              <p><strong>${postData.username}</strong> - ${new Date(postData.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>${postData.comment}</p>
+              ${postData.fileUrl ? (postData.fileUrl.endsWith('.mp4') ? `<video controls src="${postData.fileUrl}" style="max-width: 100%;"></video>` : `<img src="${postData.fileUrl}" style="max-width: 100%;">`) : ""}
+            `;
+            postsContainer.appendChild(postElement);
+          });
+        }
+
+        loadPosts();
+      } else {
+        window.location.href = 'index.html'; // 未ログインの場合はログインページへリダイレクト
+      }
     });
   </script>
 </head>
 <body>
-  <h1>管理者ダッシュボード</h1>
+  <h1>投稿画面</h1>
   <form id="postForm">
     <label for="comment">コメント:</label>
-    <textarea id="comment" required></textarea><br>
-    <label for="file">ファイル:</label>
-    <input type="file" id="file"><br>
+    <input type="text" id="comment" required>
+    <label for="file">画像または動画:</label>
+    <input type="file" id="file" accept="image/*,video/*">
     <button type="submit">投稿</button>
   </form>
   <p id="result"></p>
-  <div id="posts"></div>
+  <div id="postsContainer"></div>
 </body>
 </html>
