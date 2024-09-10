@@ -8,6 +8,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
@@ -22,6 +23,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const storage = getStorage(app);
 
     // 投稿フォームの送信処理
     document.addEventListener("DOMContentLoaded", () => {
@@ -36,10 +38,9 @@
           try {
             let fileUrl = "";
             if (file) {
-              const storageRef = firebase.storage().ref();
-              const fileRef = storageRef.child(`posts/${file.name}`);
-              await fileRef.put(file);
-              fileUrl = await fileRef.getDownloadURL();
+              const storageRef = ref(storage, `posts/${file.name}`);
+              await uploadBytes(storageRef, file);
+              fileUrl = await getDownloadURL(storageRef);
             }
 
             const userDocRef = doc(db, "users", user.email);
