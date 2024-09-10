@@ -9,6 +9,11 @@
     img {
       pointer-events: none; /* 画像の右クリックを無効化 */
     }
+    
+    /* コメントのスタイリング */
+    .comment-section {
+      margin-top: 10px;
+    }
   </style>
   <script type="module">
     // Firebaseの初期化
@@ -48,14 +53,11 @@
           const comment = document.getElementById("comment").value;
           const fileInput = document.getElementById("file");
           const file = fileInput.files[0];
-          const userDocRef = doc(db, "users", user.uid); // UID を使用してユーザー情報を取得
-          const userDoc = await getDoc(userDocRef);
-          const userData = userDoc.exists() ? userDoc.data() : { username: "Unknown" };
-
+          const userDoc = await getDoc(doc(db, "users", user.email));
           const postData = {
             comment: comment,
             timestamp: new Date(),
-            username: userData.username,
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
           };
 
           if (file) {
@@ -82,17 +84,69 @@
           const postsContainer = document.getElementById("postsContainer");
           postsContainer.innerHTML = '';
 
-          postsSnapshot.forEach(doc => {
-            const postData = doc.data();
+          // 投稿を最新のものから順に表示
+          const posts = postsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+
+          posts.forEach(post => {
             const postElement = document.createElement("div");
             postElement.innerHTML = `
-              <p><strong>${postData.username}</strong> - ${new Date(postData.timestamp.seconds * 1000).toLocaleString()}</p>
-              <p>${postData.comment}</p>
-              ${postData.fileUrl ? (postData.fileUrl.endsWith('.mp4') ? `<video controls src="${postData.fileUrl}" style="max-width: 100%;"></video>` : `<img src="${postData.fileUrl}" style="max-width: 100%;">`) : ""}
+              <div class="post">
+                <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
+                <p>${post.comment}</p>
+                ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}" style="max-width: 100%;"></video>` : `<img src="${post.fileUrl}" style="max-width: 100%;">`) : ""}
+                <div class="comment-section">
+                  <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
+                  <button onclick="submitComment('${post.id}')">コメントする</button>
+                  <div id="comments-${post.id}"></div>
+                </div>
+              </div>
             `;
             postsContainer.appendChild(postElement);
+
+            // 投稿に対するコメントを表示
+            loadComments(post.id);
           });
         }
+
+        async function loadComments(postId) {
+          const commentsCollection = collection(db, "posts", postId, "comments");
+          const commentsSnapshot = await getDocs(commentsCollection);
+          const commentsContainer = document.getElementById(`comments-${postId}`);
+          commentsContainer.innerHTML = '';
+
+          commentsSnapshot.forEach(commentDoc => {
+            const commentData = commentDoc.data();
+            const commentElement = document.createElement("div");
+            commentElement.innerHTML = `
+              <p><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>${commentData.comment}</p>
+            `;
+            commentsContainer.appendChild(commentElement);
+          });
+        }
+
+        window.submitComment = async function(postId) {
+          const commentTextarea = document.getElementById(`comment-${postId}`);
+          const comment = commentTextarea.value;
+          const user = auth.currentUser;
+          const userDoc = await getDoc(doc(db, "users", user.email));
+          const commentData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+          };
+
+          try {
+            await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
+            commentTextarea.value = '';
+            loadComments(postId);
+          } catch (error) {
+            console.error("コメント投稿エラー: ", error);
+          }
+        };
 
         loadPosts();
       } else {
