@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>投稿画面</title>
   <style>
-    /* 画像のサイズ制限 */
+    /* 画像と動画のサイズ制限 */
     img {
       max-width: 100%;
-      max-height: 400px; /* 高さの制限 */
+      max-height: 400px;
     }
-    
+
     video {
       max-width: 100%;
-      max-height: 400px; /* 高さの制限 */
+      max-height: 400px;
     }
-    
+
     /* 投稿の区切り */
     .post {
       border-bottom: 2px solid #ddd;
@@ -28,13 +28,11 @@
       margin-top: 10px;
     }
 
-    /* コメント入力欄のスタイリング */
     .comment-section textarea {
-      width: calc(100% - 22px); /* ボタンの幅を考慮 */
+      width: calc(100% - 22px);
       height: 50px;
     }
 
-    /* コメントの返信形式 */
     .comment {
       border-top: 1px solid #ddd;
       padding: 5px;
@@ -48,22 +46,29 @@
     .comment-header {
       font-weight: bold;
     }
+
+    /* プログレスバーのスタイル */
+    #progressBarContainer {
+      width: 100%;
+      background-color: #f3f3f3;
+      display: none; /* 非表示にする */
+    }
+
+    #progressBar {
+      width: 0%;
+      height: 30px;
+      background-color: #4caf50;
+    }
   </style>
   <script type="module">
-    // Firebaseの初期化
+    // Firebase初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDocs, collection, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-      authDomain: "nou-no-circle.firebaseapp.com",
-      projectId: "nou-no-circle",
-      storageBucket: "nou-no-circle.appspot.com",
-      messagingSenderId: "756338805186",
-      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-      measurementId: "G-TWBV38P13D"
+      // Firebase設定
     };
 
     const app = initializeApp(firebaseConfig);
@@ -71,13 +76,13 @@
     const auth = getAuth(app);
     const storage = getStorage(app);
 
-    // 右クリックと長タップを禁止する関数
+    // 右クリックと長タップの禁止
     function preventDefaultActions(event) {
       event.preventDefault();
     }
 
-    document.addEventListener("contextmenu", preventDefaultActions); // 右クリック禁止
-    document.addEventListener("touchstart", preventDefaultActions); // 長タップ禁止
+    document.addEventListener("contextmenu", preventDefaultActions);
+    document.addEventListener("touchstart", preventDefaultActions);
 
     // ログインユーザーを取得し、投稿機能を設定
     onAuthStateChanged(auth, async (user) => {
@@ -87,6 +92,13 @@
           const comment = document.getElementById("comment").value;
           const fileInput = document.getElementById("file");
           const file = fileInput.files[0];
+          const progressBarContainer = document.getElementById("progressBarContainer");
+          const progressBar = document.getElementById("progressBar");
+
+          // プログレスバー表示
+          progressBarContainer.style.display = "block";
+          progressBar.style.width = "0%";
+
           const userDoc = await getDoc(doc(db, "users", user.email));
           const postData = {
             comment: comment,
@@ -96,19 +108,32 @@
 
           if (file) {
             const fileRef = ref(storage, `posts/${file.name}`);
-            await uploadBytes(fileRef, file);
-            postData.fileUrl = await getDownloadURL(fileRef);
-          }
+            const uploadTask = uploadBytesResumable(fileRef, file);
 
-          try {
+            // プログレスバーの進捗を監視
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                progressBar.style.width = progress + "%";
+              },
+              (error) => {
+                console.error("アップロードエラー: ", error);
+                progressBarContainer.style.display = "none";
+              },
+              async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                postData.fileUrl = downloadURL;
+
+                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+                fileInput.value = '';
+                document.getElementById("comment").value = '';
+                loadPosts();
+                progressBarContainer.style.display = "none"; // 投稿完了後プログレスバーを非表示
+              }
+            );
+          } else {
             await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-            document.getElementById("result").innerText = "投稿が完了しました。";
-            document.getElementById("comment").value = '';
-            fileInput.value = '';
             loadPosts();
-          } catch (error) {
-            console.error("投稿エラー: ", error);
-            document.getElementById("result").innerText = "投稿に失敗しました。";
           }
         });
 
@@ -118,7 +143,6 @@
           const postsContainer = document.getElementById("postsContainer");
           postsContainer.innerHTML = '';
 
-          // 投稿を最新のものから順に表示
           const posts = postsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -139,7 +163,6 @@
             `;
             postsContainer.appendChild(postElement);
 
-            // 投稿に対するコメントを表示
             loadComments(post.id);
           });
         }
@@ -184,7 +207,7 @@
 
         loadPosts();
       } else {
-        window.location.href = 'index.html'; // 未ログインの場合はログインページへリダイレクト
+        window.location.href = 'index.html'; 
       }
     });
   </script>
@@ -198,7 +221,12 @@
     <input type="file" id="file" accept="image/*,video/*">
     <button type="submit">投稿</button>
   </form>
-  <p id="result"></p>
+
+  <!-- プログレスバー -->
+  <div id="progressBarContainer">
+    <div id="progressBar"></div>
+  </div>
+
   <div id="postsContainer"></div>
 </body>
 </html>
