@@ -253,12 +253,10 @@
   <h1>投稿画面</h1>
   <form id="postForm">
     <label for="comment">コメント:</label>
-    <textarea id="comment"></textarea>
-    <br>
-    <label for="file">ファイルを選択 (画像/動画):</label>
-    <input type="file" id="file">
-    <br>
-    <button type="submit">投稿する</button>
+    <input type="text" id="comment" required>
+    <label for="file">画像または動画:</label>
+    <input type="file" id="file" accept="image/*,video/*">
+    <button type="submit">投稿</button>
   </form>
 
   <!-- プログレスバー -->
