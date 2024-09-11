@@ -51,7 +51,7 @@
     #progressBarContainer {
       width: 100%;
       background-color: #f3f3f3;
-      display: none; /* 非表示にする */
+      display: none;
     }
 
     #progressBar {
@@ -63,19 +63,19 @@
   <script type="module">
     // Firebase初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection, getDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
-    import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
-      const firebaseConfig = {
-    apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-    authDomain: "nou-no-circle.firebaseapp.com",
-    projectId: "nou-no-circle",
-    storageBucket: "nou-no-circle.appspot.com",
-    messagingSenderId: "756338805186",
-    appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-    measurementId: "G-TWBV38P13D"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
+      authDomain: "nou-no-circle.firebaseapp.com",
+      projectId: "nou-no-circle",
+      storageBucket: "nou-no-circle.appspot.com",
+      messagingSenderId: "756338805186",
+      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
+      measurementId: "G-TWBV38P13D"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -116,7 +116,6 @@
             const fileRef = ref(storage, `posts/${file.name}`);
             const uploadTask = uploadBytesResumable(fileRef, file);
 
-            // プログレスバーの進捗を監視
             uploadTask.on('state_changed',
               (snapshot) => {
                 const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
@@ -134,7 +133,7 @@
                 fileInput.value = '';
                 document.getElementById("comment").value = '';
                 loadPosts();
-                progressBarContainer.style.display = "none"; // 投稿完了後プログレスバーを非表示
+                progressBarContainer.style.display = "none";
               }
             );
           } else {
@@ -158,7 +157,10 @@
             const postElement = document.createElement("div");
             postElement.classList.add("post");
             postElement.innerHTML = `
-              <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>
+                <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
+                <button onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</button>
+              </p>
               <p>${post.comment}</p>
               ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}"></video>` : `<img src="${post.fileUrl}">`) : ""}
               <div class="comment-section">
@@ -208,6 +210,26 @@
             loadComments(postId);
           } catch (error) {
             console.error("コメント投稿エラー: ", error);
+          }
+        };
+
+        // 投稿削除機能
+        window.deletePost = async function(postId, fileUrl) {
+          const confirmDelete = confirm("本当にこの投稿を削除しますか？");
+          if (confirmDelete) {
+            try {
+              await deleteDoc(doc(db, "posts", postId));
+
+              if (fileUrl) {
+                const fileRef = ref(storage, fileUrl);
+                await deleteObject(fileRef);
+              }
+
+              loadPosts();
+              alert("投稿が削除されました。");
+            } catch (error) {
+              console.error("投稿削除エラー: ", error);
+            }
           }
         };
 
