@@ -34,6 +34,9 @@
       border-top: 1px solid #ddd;
       padding: 5px;
       margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .comment p {
@@ -42,6 +45,18 @@
 
     .comment-header {
       font-weight: bold;
+    }
+
+    .comment-header span {
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    .delete-link {
+      color: #0000EE;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.9em;
     }
 
     #progressBarContainer {
@@ -155,7 +170,7 @@
             postElement.innerHTML = `
               <p>
                 <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
-                <button onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</button>
+                <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
               </p>
               <p>${post.comment}</p>
               ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}"></video>` : `<img src="${post.fileUrl}">`) : ""}
@@ -183,8 +198,8 @@
             commentElement.classList.add("comment");
             commentElement.innerHTML = `
               <p class="comment-header">
-                <strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}
-                ${isAdmin ? `<button onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</button>` : ""}
+                <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
+                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
               </p>
               <p>${commentData.comment}</p>
             `;
