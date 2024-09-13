@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>投稿画面</title>
+  <title>ユーザーページ</title>
+
   <style>
     img {
       max-width: 100%;
@@ -51,15 +52,7 @@
     }
 
     .comment-body {
-      margin-top: 5px; /* 返信をユーザー名、日時、削除リンクの下に表示するためにマージンを追加 */
-    }
-
-    .delete-link {
-      color: #0000EE;
-      text-decoration: underline;
-      cursor: pointer;
-      font-size: 0.9em;
-      float: right; /* 右端に寄せる */
+      margin-top: 5px;
     }
 
     #progressBarContainer {
@@ -76,9 +69,9 @@
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, doc, getDocs, collection } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
-    import { getStorage, ref, uploadBytesResumable, getDownloadURL, getMetadata, deleteObject } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
+    import { getStorage, ref, getDownloadURL, getMetadata } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
@@ -95,68 +88,8 @@
     const auth = getAuth(app);
     const storage = getStorage(app);
 
-    let isAdmin = false;
-
-    // 右クリックと長タップの禁止
-    function preventDefaultActions(event) {
-      event.preventDefault();
-    }
-
-    document.addEventListener("contextmenu", preventDefaultActions);
-    document.addEventListener("touchstart", preventDefaultActions);
-    
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.email));
-        isAdmin = userDoc.exists() && userDoc.data().role === "admin";
-
-        document.getElementById("postForm").addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const comment = document.getElementById("comment").value;
-          const fileInput = document.getElementById("file");
-          const file = fileInput.files[0];
-          const progressBarContainer = document.getElementById("progressBarContainer");
-          const progressBar = document.getElementById("progressBar");
-
-          progressBarContainer.style.display = "block";
-          progressBar.style.width = "0%";
-
-          const postData = {
-            comment: comment,
-            timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
-          };
-
-          if (file) {
-            const fileRef = ref(storage, `posts/${file.name}`);
-            const uploadTask = uploadBytesResumable(fileRef, file);
-
-            uploadTask.on('state_changed',
-              (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressBar.style.width = progress + "%";
-              },
-              (error) => {
-                console.error("アップロードエラー: ", error);
-                progressBarContainer.style.display = "none";
-              },
-              async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                postData.fileUrl = downloadURL;
-
-                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-                fileInput.value = '';
-                document.getElementById("comment").value = '';
-                loadPosts();
-                progressBarContainer.style.display = "none";
-              }
-            );
-          } else {
-            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-            loadPosts();
-          }
-        });
-
         async function loadPosts() {
           const postsCollection = collection(db, "posts");
           const postsSnapshot = await getDocs(postsCollection);
@@ -174,7 +107,6 @@
             postElement.innerHTML = `
               <p>
                 <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
-                <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
               </p>
               <p>${post.comment}</p>
               ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
@@ -225,7 +157,6 @@
             commentElement.innerHTML = `
               <div class="comment-header">
                 <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
-                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
               </div>
               <div class="comment-body">
                 <p>${commentData.comment}</p>
@@ -241,7 +172,7 @@
           const commentData = {
             comment: comment,
             timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+            username: user.email
           };
 
           try {
@@ -253,57 +184,23 @@
           }
         };
 
-        window.deletePost = async function(postId, fileUrl) {
-          const confirmDelete = confirm("本当にこの投稿を削除しますか？");
-          if (confirmDelete) {
-            try {
-              await deleteDoc(doc(db, "posts", postId));
-
-              if (fileUrl) {
-                const fileRef = ref(storage, fileUrl);
-                await deleteObject(fileRef);
-              }
-
-              loadPosts();
-              alert("投稿が削除されました。");
-            } catch (error) {
-              console.error("投稿削除エラー: ", error);
-            }
-          }
-        };
-
-        window.deleteComment = async function(postId, commentId) {
-          const confirmDelete = confirm("本当にこの返信を削除しますか？");
-          if (confirmDelete) {
-            try {
-              await deleteDoc(doc(db, "posts", postId, "comments", commentId));
-              loadComments(postId);
-              alert("返信が削除されました。");
-            } catch (error) {
-              console.error("返信削除エラー: ", error);
-            }
-          }
-        };
-
         loadPosts();
       } else {
-        window.location.href = 'index.html'; 
+        window.location.href = 'login.html'; 
       }
     });
 
     document.addEventListener("visibilitychange", function() {
       if (document.visibilityState === 'hidden') {
-        // ページの内容を非表示にする
         document.body.style.display = 'none';
       } else {
-        // ページの内容を復元する
         document.body.style.display = 'block';
       }
     });
   </script>
 </head>
 <body>
-  <h1>閲覧専用ページ</h1>
+  <h1>ユーザーページ</h1>
   <div id="postsContainer"></div>
 </body>
 </html>
