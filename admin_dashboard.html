@@ -41,7 +41,6 @@
     }
 
     .comment-header {
-      font-weight: bold;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -267,6 +266,16 @@
         window.location.href = 'index.html'; 
       }
     });
+
+      document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === 'hidden') {
+      // ページの内容を非表示にする
+      document.body.style.display = 'none';
+    } else {
+      // ページの内容を復元する
+      document.body.style.display = 'block';
+    }
+  });
   </script>
 </head>
 <body>
