@@ -100,6 +100,56 @@
 
         onAuthStateChanged(auth, async (user) => {
       if (user) {
+      const userDoc = await getDoc(doc(db, "users", user.email));
+        isAdmin = userDoc.exists() && userDoc.data().role === "admin";
+
+        document.getElementById("postForm").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const comment = document.getElementById("comment").value;
+          const fileInput = document.getElementById("file");
+          const file = fileInput.files[0];
+          const progressBarContainer = document.getElementById("progressBarContainer");
+          const progressBar = document.getElementById("progressBar");
+
+          progressBarContainer.style.display = "block";
+          progressBar.style.width = "0%";
+
+          const postData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+          };
+
+          if (file) {
+            const fileRef = ref(storage, `posts/${file.name}`);
+            const uploadTask = uploadBytesResumable(fileRef, file);
+
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                progressBar.style.width = progress + "%";
+              },
+              (error) => {
+                console.error("アップロードエラー: ", error);
+                progressBarContainer.style.display = "none";
+              },
+              async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                postData.fileUrl = downloadURL;
+
+                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+                fileInput.value = '';
+                document.getElementById("comment").value = '';
+                loadPosts();
+                progressBarContainer.style.display = "none";
+              }
+            );
+          } else {
+            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+            loadPosts();
+          }
+        });
+
         async function loadPosts() {
           const postsCollection = collection(db, "posts");
           const postsSnapshot = await getDocs(postsCollection);
@@ -176,33 +226,23 @@
           });
         }
 
-window.submitComment = async function(postId) {
-  const commentTextarea = document.getElementById(`comment-${postId}`);
-  const comment = commentTextarea.value;
+        window.submitComment = async function(postId) {
+          const commentTextarea = document.getElementById(`comment-${postId}`);
+          const comment = commentTextarea.value;
+          const commentData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+          };
 
-  // ユーザー名の取得
-  const username = auth.currentUser.displayName ? auth.currentUser.displayName : "Unknown";
-
-  const commentData = {
-    comment: comment,
-    timestamp: new Date(),
-    username: username, // ユーザー名を保存
-  };
-
-  try {
-    // コメントを Firestore に保存
-    await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
-    
-    // テキストエリアをクリア
-    commentTextarea.value = '';
-    
-    // コメントを再読み込み
-    loadComments(postId);
-  } catch (error) {
-    console.error("コメント投稿エラー: ", error);
-  }
-};
-
+          try {
+            await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
+            commentTextarea.value = '';
+            loadComments(postId);
+          } catch (error) {
+            console.error("コメント投稿エラー: ", error);
+          }
+        };
 
         loadPosts();
       } else {
