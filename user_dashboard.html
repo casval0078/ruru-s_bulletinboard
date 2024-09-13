@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>閲覧専用ページ</title>
+  <title>投稿画面</title>
   <style>
-    /* 画像と動画のサイズ制限 */
     img {
       max-width: 100%;
       max-height: 400px;
@@ -16,14 +15,12 @@
       max-height: 400px;
     }
 
-    /* 投稿の区切り */
     .post {
       border-bottom: 2px solid #ddd;
       padding-bottom: 10px;
       margin-bottom: 10px;
     }
 
-    /* コメントセクション */
     .comment-section {
       margin-top: 10px;
     }
@@ -44,28 +41,61 @@
     }
 
     .comment-header {
-      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .comment-header span {
+      margin-right: 10px;
+    }
+
+    .comment-body {
+      margin-top: 5px; /* 返信をユーザー名、日時、削除リンクの下に表示するためにマージンを追加 */
+    }
+
+    .delete-link {
+      color: #0000EE;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.9em;
+      float: right; /* 右端に寄せる */
+    }
+
+    #progressBarContainer {
+      width: 100%;
+      background-color: #f3f3f3;
+      display: none;
+    }
+
+    #progressBar {
+      width: 0%;
+      height: 30px;
+      background-color: #4caf50;
     }
   </style>
   <script type="module">
-    // Firebase初期化
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL, getMetadata, deleteObject } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
-      const firebaseConfig = {
-    apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-    authDomain: "nou-no-circle.firebaseapp.com",
-    projectId: "nou-no-circle",
-    storageBucket: "nou-no-circle.appspot.com",
-    messagingSenderId: "756338805186",
-    appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-    measurementId: "G-TWBV38P13D"
-  };
+    const firebaseConfig = {
+      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
+      authDomain: "nou-no-circle.firebaseapp.com",
+      projectId: "nou-no-circle",
+      storageBucket: "nou-no-circle.appspot.com",
+      messagingSenderId: "756338805186",
+      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
+      measurementId: "G-TWBV38P13D"
+    };
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     const auth = getAuth(app);
+    const storage = getStorage(app);
+
+    let isAdmin = false;
 
     // 右クリックと長タップの禁止
     function preventDefaultActions(event) {
@@ -74,9 +104,59 @@
 
     document.addEventListener("contextmenu", preventDefaultActions);
     document.addEventListener("touchstart", preventDefaultActions);
-
+    
     onAuthStateChanged(auth, async (user) => {
       if (user) {
+        const userDoc = await getDoc(doc(db, "users", user.email));
+        isAdmin = userDoc.exists() && userDoc.data().role === "admin";
+
+        document.getElementById("postForm").addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const comment = document.getElementById("comment").value;
+          const fileInput = document.getElementById("file");
+          const file = fileInput.files[0];
+          const progressBarContainer = document.getElementById("progressBarContainer");
+          const progressBar = document.getElementById("progressBar");
+
+          progressBarContainer.style.display = "block";
+          progressBar.style.width = "0%";
+
+          const postData = {
+            comment: comment,
+            timestamp: new Date(),
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
+          };
+
+          if (file) {
+            const fileRef = ref(storage, `posts/${file.name}`);
+            const uploadTask = uploadBytesResumable(fileRef, file);
+
+            uploadTask.on('state_changed',
+              (snapshot) => {
+                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                progressBar.style.width = progress + "%";
+              },
+              (error) => {
+                console.error("アップロードエラー: ", error);
+                progressBarContainer.style.display = "none";
+              },
+              async () => {
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                postData.fileUrl = downloadURL;
+
+                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+                fileInput.value = '';
+                document.getElementById("comment").value = '';
+                loadPosts();
+                progressBarContainer.style.display = "none";
+              }
+            );
+          } else {
+            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+            loadPosts();
+          }
+        });
+
         async function loadPosts() {
           const postsCollection = collection(db, "posts");
           const postsSnapshot = await getDocs(postsCollection);
@@ -92,9 +172,12 @@
             const postElement = document.createElement("div");
             postElement.classList.add("post");
             postElement.innerHTML = `
-              <p><strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}</p>
+              <p>
+                <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
+                <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
+              </p>
               <p>${post.comment}</p>
-              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}"></video>` : `<img src="${post.fileUrl}">`) : ""}
+              ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
               <div class="comment-section">
                 <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
                 <button onclick="submitComment('${post.id}')">コメントする</button>
@@ -103,8 +186,30 @@
             `;
             postsContainer.appendChild(postElement);
 
+            loadFile(post.id, post.fileUrl);
             loadComments(post.id);
           });
+        }
+
+        async function loadFile(postId, fileUrl) {
+          const fileRef = ref(storage, fileUrl);
+          try {
+            const metadata = await getMetadata(fileRef);
+            const fileType = metadata.contentType;
+
+            const fileContainer = document.getElementById(`file-${postId}`);
+            if (fileType.startsWith('image/')) {
+              fileContainer.innerHTML = `<img src="${fileUrl}">`;
+            } else if (fileType.startsWith('video/')) {
+              fileContainer.innerHTML = `
+                <video controlsList="nodownload" controls oncontextmenu="return false;">
+                  <source src="${fileUrl}" type="${fileType}">
+                  Your browser does not support the video tag.
+                </video>`;
+            }
+          } catch (error) {
+            console.error("ファイルメタデータ取得エラー: ", error);
+          }
         }
 
         async function loadComments(postId) {
@@ -118,8 +223,13 @@
             const commentElement = document.createElement("div");
             commentElement.classList.add("comment");
             commentElement.innerHTML = `
-              <p class="comment-header"><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</p>
-              <p>${commentData.comment}</p>
+              <div class="comment-header">
+                <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
+                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
+              </div>
+              <div class="comment-body">
+                <p>${commentData.comment}</p>
+              </div>
             `;
             commentsContainer.appendChild(commentElement);
           });
@@ -128,7 +238,6 @@
         window.submitComment = async function(postId) {
           const commentTextarea = document.getElementById(`comment-${postId}`);
           const comment = commentTextarea.value;
-          const userDoc = await getDoc(doc(db, "users", user.email));  // getDocメソッドを正しく使用
           const commentData = {
             comment: comment,
             timestamp: new Date(),
@@ -144,9 +253,51 @@
           }
         };
 
+        window.deletePost = async function(postId, fileUrl) {
+          const confirmDelete = confirm("本当にこの投稿を削除しますか？");
+          if (confirmDelete) {
+            try {
+              await deleteDoc(doc(db, "posts", postId));
+
+              if (fileUrl) {
+                const fileRef = ref(storage, fileUrl);
+                await deleteObject(fileRef);
+              }
+
+              loadPosts();
+              alert("投稿が削除されました。");
+            } catch (error) {
+              console.error("投稿削除エラー: ", error);
+            }
+          }
+        };
+
+        window.deleteComment = async function(postId, commentId) {
+          const confirmDelete = confirm("本当にこの返信を削除しますか？");
+          if (confirmDelete) {
+            try {
+              await deleteDoc(doc(db, "posts", postId, "comments", commentId));
+              loadComments(postId);
+              alert("返信が削除されました。");
+            } catch (error) {
+              console.error("返信削除エラー: ", error);
+            }
+          }
+        };
+
         loadPosts();
       } else {
         window.location.href = 'index.html'; 
+      }
+    });
+
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === 'hidden') {
+        // ページの内容を非表示にする
+        document.body.style.display = 'none';
+      } else {
+        // ページの内容を復元する
+        document.body.style.display = 'block';
       }
     });
   </script>
