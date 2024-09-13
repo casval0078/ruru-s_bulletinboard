@@ -78,7 +78,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
     import { getFirestore, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
-    import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
+    import { getStorage, ref, uploadBytesResumable, getDownloadURL, getMetadata, deleteObject } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
@@ -104,6 +104,7 @@
 
     document.addEventListener("contextmenu", preventDefaultActions);
     document.addEventListener("touchstart", preventDefaultActions);
+    
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userDoc = await getDoc(doc(db, "users", user.email));
@@ -176,11 +177,7 @@
                 <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
               </p>
               <p>${post.comment}</p>
-              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `
-                <video controls controlslist="nodownload" oncontextmenu="return false;">
-                  <source src="${post.fileUrl}" type="video/mp4">
-                  お使いのブラウザは動画をサポートしていません。
-                </video>` : `<img src="${post.fileUrl}" alt="投稿画像">`) : ""}
+              ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
               <div class="comment-section">
                 <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
                 <button onclick="submitComment('${post.id}')">コメントする</button>
@@ -189,8 +186,26 @@
             `;
             postsContainer.appendChild(postElement);
 
+            loadFile(post.id, post.fileUrl);
             loadComments(post.id);
           });
+        }
+
+        async function loadFile(postId, fileUrl) {
+          const fileRef = ref(storage, fileUrl);
+          try {
+            const metadata = await getMetadata(fileRef);
+            const fileType = metadata.contentType;
+
+            const fileContainer = document.getElementById(`file-${postId}`);
+            if (fileType.startsWith('image/')) {
+              fileContainer.innerHTML = `<img src="${fileUrl}">`;
+            } else if (fileType.startsWith('video/')) {
+              fileContainer.innerHTML = `<video controls src="${fileUrl}"></video>`;
+            }
+          } catch (error) {
+            console.error("ファイルメタデータ取得エラー: ", error);
+          }
         }
 
         async function loadComments(postId) {
@@ -272,15 +287,15 @@
       }
     });
 
-      document.addEventListener("visibilitychange", function() {
-    if (document.visibilityState === 'hidden') {
-      // ページの内容を非表示にする
-      document.body.style.display = 'none';
-    } else {
-      // ページの内容を復元する
-      document.body.style.display = 'block';
-    }
-  });
+    document.addEventListener("visibilitychange", function() {
+      if (document.visibilityState === 'hidden') {
+        // ページの内容を非表示にする
+        document.body.style.display = 'none';
+      } else {
+        // ページの内容を復元する
+        document.body.style.display = 'block';
+      }
+    });
   </script>
 </head>
 <body>
