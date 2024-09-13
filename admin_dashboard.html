@@ -201,7 +201,7 @@
             if (fileType.startsWith('image/')) {
               fileContainer.innerHTML = `<img src="${fileUrl}">`;
             } else if (fileType.startsWith('video/')) {
-              fileContainer.innerHTML = `<video controls controlslist="nodownload" oncontextmenu="return false;" src="${fileUrl}"></video>`;
+              fileContainer.innerHTML = `<video controls src="${fileUrl}"></video>`;
             }
           } catch (error) {
             console.error("ファイルメタデータ取得エラー: ", error);
