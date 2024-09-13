@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ユーザーページ</title>
-
   <style>
     img {
       max-width: 100%;
@@ -55,32 +54,27 @@
       margin-top: 5px;
     }
 
-    #progressBarContainer {
-      width: 100%;
-      background-color: #f3f3f3;
-      display: none;
-    }
-
-    #progressBar {
-      width: 0%;
-      height: 30px;
-      background-color: #4caf50;
+    .delete-link {
+      color: #0000EE;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.9em;
+      float: right;
     }
   </style>
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
+    import { getFirestore, doc, getDocs, collection, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
     import { getStorage, ref, getDownloadURL, getMetadata } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-storage.js";
 
     const firebaseConfig = {
-      apiKey: "AIzaSyDsK4imQ3uWcK7hyESo6hnDyQ96lsPNCZ8",
-      authDomain: "nou-no-circle.firebaseapp.com",
-      projectId: "nou-no-circle",
-      storageBucket: "nou-no-circle.appspot.com",
-      messagingSenderId: "756338805186",
-      appId: "1:756338805186:web:cb740e035ac611b5baae5b",
-      measurementId: "G-TWBV38P13D"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
     };
 
     const app = initializeApp(firebaseConfig);
@@ -90,7 +84,7 @@
 
     let isAdmin = false;
 
-    // 右クリックと長タップの禁止
+    // Prevent right-click and long-press
     function preventDefaultActions(event) {
       event.preventDefault();
     }
@@ -98,57 +92,10 @@
     document.addEventListener("contextmenu", preventDefaultActions);
     document.addEventListener("touchstart", preventDefaultActions);
 
-        onAuthStateChanged(auth, async (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
-      const userDoc = await getDoc(doc(db, "users", user.email));
+        const userDoc = await getDoc(doc(db, "users", user.email));
         isAdmin = userDoc.exists() && userDoc.data().role === "admin";
-
-        document.getElementById("postForm").addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const comment = document.getElementById("comment").value;
-          const fileInput = document.getElementById("file");
-          const file = fileInput.files[0];
-          const progressBarContainer = document.getElementById("progressBarContainer");
-          const progressBar = document.getElementById("progressBar");
-
-          progressBarContainer.style.display = "block";
-          progressBar.style.width = "0%";
-
-          const postData = {
-            comment: comment,
-            timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
-          };
-
-          if (file) {
-            const fileRef = ref(storage, `posts/${file.name}`);
-            const uploadTask = uploadBytesResumable(fileRef, file);
-
-            uploadTask.on('state_changed',
-              (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressBar.style.width = progress + "%";
-              },
-              (error) => {
-                console.error("アップロードエラー: ", error);
-                progressBarContainer.style.display = "none";
-              },
-              async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                postData.fileUrl = downloadURL;
-
-                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-                fileInput.value = '';
-                document.getElementById("comment").value = '';
-                loadPosts();
-                progressBarContainer.style.display = "none";
-              }
-            );
-          } else {
-            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-            loadPosts();
-          }
-        });
 
         async function loadPosts() {
           const postsCollection = collection(db, "posts");
@@ -217,6 +164,7 @@
             commentElement.innerHTML = `
               <div class="comment-header">
                 <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
+                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
               </div>
               <div class="comment-body">
                 <p>${commentData.comment}</p>
@@ -244,23 +192,29 @@
           }
         };
 
+        window.deleteComment = async function(postId, commentId) {
+          const confirmDelete = confirm("本当にこの返信を削除しますか？");
+          if (confirmDelete) {
+            try {
+              await deleteDoc(doc(db, "posts", postId, "comments", commentId));
+              loadComments(postId);
+              alert("返信が削除されました。");
+            } catch (error) {
+              console.error("返信削除エラー: ", error);
+            }
+          }
+        };
+
         loadPosts();
       } else {
         window.location.href = 'index.html'; 
-      }
-    });
-
-    document.addEventListener("visibilitychange", function() {
-      if (document.visibilityState === 'hidden') {
-        document.body.style.display = 'none';
-      } else {
-        document.body.style.display = 'block';
       }
     });
   </script>
 </head>
 <body>
   <h1>ユーザーページ</h1>
+
   <div id="postsContainer"></div>
 </body>
 </html>
