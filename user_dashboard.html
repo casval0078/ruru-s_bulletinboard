@@ -88,7 +88,17 @@
     const auth = getAuth(app);
     const storage = getStorage(app);
 
-    onAuthStateChanged(auth, async (user) => {
+    let isAdmin = false;
+
+    // 右クリックと長タップの禁止
+    function preventDefaultActions(event) {
+      event.preventDefault();
+    }
+
+    document.addEventListener("contextmenu", preventDefaultActions);
+    document.addEventListener("touchstart", preventDefaultActions);
+
+        onAuthStateChanged(auth, async (user) => {
       if (user) {
         async function loadPosts() {
           const postsCollection = collection(db, "posts");
@@ -172,7 +182,7 @@
           const commentData = {
             comment: comment,
             timestamp: new Date(),
-            username: user.email
+            username: userDoc.exists() ? userDoc.data().username : "Unknown",
           };
 
           try {
@@ -186,7 +196,7 @@
 
         loadPosts();
       } else {
-        window.location.href = 'login.html'; 
+        window.location.href = 'index.html'; 
       }
     });
 
