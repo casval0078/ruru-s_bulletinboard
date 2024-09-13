@@ -176,23 +176,33 @@
           });
         }
 
-        window.submitComment = async function(postId) {
-          const commentTextarea = document.getElementById(`comment-${postId}`);
-          const comment = commentTextarea.value;
-          const commentData = {
-            comment: comment,
-            timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
-          };
+window.submitComment = async function(postId) {
+  const commentTextarea = document.getElementById(`comment-${postId}`);
+  const comment = commentTextarea.value;
 
-          try {
-            await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
-            commentTextarea.value = '';
-            loadComments(postId);
-          } catch (error) {
-            console.error("コメント投稿エラー: ", error);
-          }
-        };
+  // ユーザー名の取得
+  const username = auth.currentUser.displayName ? auth.currentUser.displayName : "Unknown";
+
+  const commentData = {
+    comment: comment,
+    timestamp: new Date(),
+    username: username, // ユーザー名を保存
+  };
+
+  try {
+    // コメントを Firestore に保存
+    await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
+    
+    // テキストエリアをクリア
+    commentTextarea.value = '';
+    
+    // コメントを再読み込み
+    loadComments(postId);
+  } catch (error) {
+    console.error("コメント投稿エラー: ", error);
+  }
+};
+
 
         loadPosts();
       } else {
