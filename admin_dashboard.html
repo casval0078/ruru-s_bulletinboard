@@ -201,7 +201,11 @@
             if (fileType.startsWith('image/')) {
               fileContainer.innerHTML = `<img src="${fileUrl}">`;
             } else if (fileType.startsWith('video/')) {
-              fileContainer.innerHTML = `<video controls src="${fileUrl}"></video>`;
+              fileContainer.innerHTML = `
+                <video controlsList="nodownload" controls oncontextmenu="return false;">
+                  <source src="${fileUrl}" type="${fileType}">
+                  Your browser does not support the video tag.
+                </video>`;
             }
           } catch (error) {
             console.error("ファイルメタデータ取得エラー: ", error);
