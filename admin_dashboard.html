@@ -176,7 +176,11 @@
                 <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
               </p>
               <p>${post.comment}</p>
-              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `<video controls src="${post.fileUrl}"></video>` : `<img src="${post.fileUrl}">`) : ""}
+              ${post.fileUrl ? (post.fileUrl.endsWith('.mp4') ? `
+                <video controls controlslist="nodownload" oncontextmenu="return false;">
+                  <source src="${post.fileUrl}" type="video/mp4">
+                  お使いのブラウザは動画をサポートしていません。
+                </video>` : `<img src="${post.fileUrl}" alt="投稿画像">`) : ""}
               <div class="comment-section">
                 <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
                 <button onclick="submitComment('${post.id}')">コメントする</button>
