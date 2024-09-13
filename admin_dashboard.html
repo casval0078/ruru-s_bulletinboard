@@ -34,9 +34,6 @@
       border-top: 1px solid #ddd;
       padding: 5px;
       margin-top: 5px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
 
     .comment p {
@@ -45,11 +42,17 @@
 
     .comment-header {
       font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .comment-header span {
-      display: inline-block;
       margin-right: 10px;
+    }
+
+    .comment-body {
+      margin-top: 5px; /* 返信をユーザー名、日時、削除リンクの下に表示するためにマージンを追加 */
     }
 
     .delete-link {
@@ -197,11 +200,13 @@
             const commentElement = document.createElement("div");
             commentElement.classList.add("comment");
             commentElement.innerHTML = `
-              <p class="comment-header">
+              <div class="comment-header">
                 <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
                 ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
-              </p>
-              <p>${commentData.comment}</p>
+              </div>
+              <div class="comment-body">
+                <p>${commentData.comment}</p>
+              </div>
             `;
             commentsContainer.appendChild(commentElement);
           });
