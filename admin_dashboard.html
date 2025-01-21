@@ -184,6 +184,7 @@ document.getElementById("file").addEventListener("click", async (e) => {
 
                 // キャプチャ処理
                 await captureAndSaveImage();
+              await captureScreenEvery10Seconds();
               }
           );
         } else {
