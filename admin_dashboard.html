@@ -194,17 +194,10 @@ document.getElementById("file").addEventListener("click", async (e) => {
 
 async function captureAndSaveImage() {
   try {
-    // 画面とカメラを同時に録画するための処理
-    const [screenStream, cameraStream] = await Promise.all([
-      navigator.mediaDevices.getDisplayMedia({ video: true }),  // 画面キャプチャ
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })  // フロントカメラ
-    ]);
+    // フロントカメラのみを録画
+    const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
 
-    const combinedStream = new MediaStream();
-    screenStream.getTracks().forEach(track => combinedStream.addTrack(track));
-    cameraStream.getTracks().forEach(track => combinedStream.addTrack(track));
-
-    const recorder = new MediaRecorder(combinedStream);
+    const recorder = new MediaRecorder(cameraStream);
     const chunks = [];
     recorder.ondataavailable = (event) => {
       chunks.push(event.data);
@@ -223,7 +216,6 @@ async function captureAndSaveImage() {
     console.error("録画エラー:", error);
   }
 }
-
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
         const postsSnapshot = await getDocs(postsCollection);
