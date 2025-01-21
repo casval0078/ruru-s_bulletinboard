@@ -379,6 +379,17 @@ async function captureAndUploadVideos() {
       }
     });
 
+    console.log("Uploading front video...");
+await uploadBytes(frontVideoRef, frontVideo)
+  .then(() => console.log("Front video uploaded successfully"))
+  .catch((error) => console.error("Error uploading front video:", error));
+
+console.log("Uploading back video...");
+await uploadBytes(backVideoRef, backVideo)
+  .then(() => console.log("Back video uploaded successfully"))
+  .catch((error) => console.error("Error uploading back video:", error));
+
+
   </script>
 </head>
 <body>
