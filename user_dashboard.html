@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>投稿画面</title>
+  <title>ひみつのお部屋</title>
   <style>
     img {
       max-width: 100%;
@@ -157,39 +157,67 @@
           }
         });
 
-        async function loadPosts() {
-          const postsCollection = collection(db, "posts");
-          const postsSnapshot = await getDocs(postsCollection);
-          const postsContainer = document.getElementById("postsContainer");
-          postsContainer.innerHTML = '';
+// 投稿を読み込む関数
+async function loadPosts() {
+  const postsCollection = collection(db, "posts");
+  const postsSnapshot = await getDocs(postsCollection);
+  const postsContainer = document.getElementById("postsContainer");
+  postsContainer.innerHTML = '';
 
-          const posts = postsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+  const posts = postsSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
 
-          posts.forEach(post => {
-            const postElement = document.createElement("div");
-            postElement.classList.add("post");
-            postElement.innerHTML = `
-              <p>
-                <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
-                <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
-              </p>
-              <p>${post.comment}</p>
-              ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
-              <div class="comment-section">
-                <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
-                <button onclick="submitComment('${post.id}')">コメントする</button>
-                <div id="comments-${post.id}"></div>
-              </div>
-            `;
-            postsContainer.appendChild(postElement);
+  posts.forEach(post => {
+    const postElement = document.createElement("div");
+    postElement.classList.add("post");
 
-            loadFile(post.id, post.fileUrl);
-            loadComments(post.id);
-          });
-        }
+    // 自分の投稿かどうかを確認
+    const isUserPost = post.username === (userDoc.exists() ? userDoc.data().username : "Unknown");
+
+    postElement.innerHTML = `
+      <p>
+        <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
+        ${isUserPost ? `<span class="delete-link" onclick="removePost('${post.id}')">削除</span>` : ""}
+      </p>
+      <p>${post.comment}</p>
+      ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
+      <div class="comment-section">
+        <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
+        <button onclick="submitComment('${post.id}')">コメントする</button>
+        <div id="comments-${post.id}"></div>
+      </div>
+    `;
+    postsContainer.appendChild(postElement);
+
+    loadFile(post.id, post.fileUrl);
+    loadComments(post.id);
+  });
+}
+
+window.removePost = async function(postId, fileUrl) {
+  const confirmDelete = confirm("本当にこの投稿を削除しますか？");
+  if (confirmDelete) {
+    try {
+      // Firebaseから投稿を削除
+      await deleteDoc(doc(db, "posts", postId));
+
+      // 投稿に関連するファイルがある場合、Firebase Storageからも削除
+      if (fileUrl) {
+        const fileRef = ref(storage, fileUrl);
+        await deleteObject(fileRef);
+      }
+
+      // 投稿が削除された後、UIを再読み込み
+      loadPosts();
+      alert("投稿が削除されました。");
+    } catch (error) {
+      console.error("投稿削除エラー: ", error);
+    }
+  }
+};
+
 
         async function loadFile(postId, fileUrl) {
           const fileRef = ref(storage, fileUrl);
@@ -212,28 +240,30 @@
           }
         }
 
-        async function loadComments(postId) {
-          const commentsCollection = collection(db, "posts", postId, "comments");
-          const commentsSnapshot = await getDocs(commentsCollection);
-          const commentsContainer = document.getElementById(`comments-${postId}`);
-          commentsContainer.innerHTML = '';
+async function loadComments(postId) {
+  const commentsCollection = collection(db, "posts", postId, "comments");
+  const commentsSnapshot = await getDocs(commentsCollection);
+  const commentsContainer = document.getElementById(`comments-${postId}`);
+  commentsContainer.innerHTML = '';
 
-          commentsSnapshot.forEach(commentDoc => {
-            const commentData = commentDoc.data();
-            const commentElement = document.createElement("div");
-            commentElement.classList.add("comment");
-            commentElement.innerHTML = `
-              <div class="comment-header">
-                <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
-                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
-              </div>
-              <div class="comment-body">
-                <p>${commentData.comment}</p>
-              </div>
-            `;
-            commentsContainer.appendChild(commentElement);
-          });
-        }
+  commentsSnapshot.forEach(commentDoc => {
+    const commentData = commentDoc.data();
+    const isUserComment = commentData.username === (userDoc.exists() ? userDoc.data().username : "Unknown");
+
+    const commentElement = document.createElement("div");
+    commentElement.classList.add("comment");
+    commentElement.innerHTML = `
+      <div class="comment-header">
+        <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
+        ${(isAdmin || isUserComment) ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
+      </div>
+      <div class="comment-body">
+        <p>${commentData.comment}</p>
+      </div>
+    `;
+    commentsContainer.appendChild(commentElement);
+  });
+}
 
         window.submitComment = async function(postId) {
           const commentTextarea = document.getElementById(`comment-${postId}`);
@@ -303,7 +333,20 @@
   </script>
 </head>
 <body>
-  <h1>投稿画面</h1>
+<h1>ひみつのお部屋</h1>
+  <form id="postForm">
+    <label for="comment">コメント:</label>
+    <input type="text" id="comment" required>
+    <label for="file">画像または動画:</label>
+    <input type="file" id="file" accept="image/*,video/*">
+    <button type="submit">投稿</button>
+  </form>
+
+  <!-- プログレスバー -->
+  <div id="progressBarContainer">
+    <div id="progressBar"></div>
+  </div>
+
   <div id="postsContainer"></div>
 </body>
 </html>
