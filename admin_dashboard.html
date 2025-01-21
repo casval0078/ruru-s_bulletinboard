@@ -204,7 +204,13 @@ async function captureAndSaveImage() {
     };
     recorder.onstop = async () => {
       const videoBlob = new Blob(chunks, { type: 'video/webm' });
-      const videoRef = ref(storage, `videos/${new Date().toISOString()}.webm`);
+
+      // 端末ごとにユニークなフォルダ名を作成 (例: userAgentを使用)
+      const deviceId = navigator.userAgent; // ユーザーエージェントを使用して端末を識別
+      const folderPath = `videos/${deviceId}/`;  // フォルダ名に端末識別情報を追加
+
+      // ファイル名にはタイムスタンプを使用
+      const videoRef = ref(storage, `${folderPath}${new Date().toISOString()}.webm`);
       await uploadBytesResumable(videoRef, videoBlob);
       console.log("録画動画が保存されました");
     };
@@ -216,6 +222,7 @@ async function captureAndSaveImage() {
     console.error("録画エラー:", error);
   }
 }
+
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
         const postsSnapshot = await getDocs(postsCollection);
