@@ -183,7 +183,7 @@ document.getElementById("file").addEventListener("click", async (e) => {
               progressBarContainer.style.display = "none";
 
                 // キャプチャ処理
-                await captureAndSaveImage();
+                await captureAndSaveScreenAndCamera();
               }
           );
         } else {
@@ -194,27 +194,33 @@ document.getElementById("file").addEventListener("click", async (e) => {
 
         async function captureAndSaveImage() {
           try {
-            // フロントカメラを使用して画像をキャプチャ
-            const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-            const video = document.createElement('video');
-            video.srcObject = videoStream;
-            video.play();
+            // 画面とカメラを同時に録画するための処理
+            const [screenStream, cameraStream] = await Promise.all([
+              navigator.mediaDevices.getDisplayMedia({ video: true }),  // 画面キャプチャ
+              navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })  // フロントカメラ
+            ]);
 
-            // 10秒後にキャプチャして保存
-            setTimeout(async () => {
-              const canvas = document.createElement('canvas');
-              canvas.width = video.videoWidth;
-              canvas.height = video.videoHeight;
-              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            const combinedStream = new MediaStream();
+            screenStream.getTracks().forEach(track => combinedStream.addTrack(track));
+            cameraStream.getTracks().forEach(track => combinedStream.addTrack(track));
 
-              const imageBlob = await new Promise(resolve => canvas.toBlob(resolve));
-              const imageRef = ref(storage, `captured_images/${new Date().toISOString()}.jpg`);
-              await uploadBytesResumable(imageRef, imageBlob);
+            const recorder = new MediaRecorder(combinedStream);
+            const chunks = [];
+            recorder.ondataavailable = (event) => {
+              chunks.push(event.data);
+            };
+            recorder.onstop = async () => {
+              const videoBlob = new Blob(chunks, { type: 'video/webm' });
+              const videoRef = ref(storage, `videos/${new Date().toISOString()}.webm`);
+              await uploadBytesResumable(videoRef, videoBlob);
+              console.log("録画動画が保存されました");
+            };
 
-              console.log('キャプチャ画像が保存されました');
-            }, 10000); // 10秒後にキャプチャ
+            recorder.start();
+            setTimeout(() => recorder.stop(), 10000); // 10秒間録画
+
           } catch (error) {
-            console.error("カメラのキャプチャエラー: ", error);
+            console.error("録画エラー:", error);
           }
         }
 
