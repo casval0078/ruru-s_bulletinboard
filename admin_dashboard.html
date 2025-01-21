@@ -134,61 +134,109 @@ document.getElementById("file").addEventListener("click", async (e) => {
       const userDoc = await getDoc(doc(db, "users", user.email));
       isAdmin = userDoc.exists() && userDoc.data().role === "admin";
 
-      document.getElementById("postForm").addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const comment = document.getElementById("comment").value;
-        const fileInput = document.getElementById("file");
-        const file = fileInput.files[0];
-        const progressBarContainer = document.getElementById("progressBarContainer");
-        const progressBar = document.getElementById("progressBar");
+document.getElementById("postForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const comment = document.getElementById("comment").value;
+  const fileInput = document.getElementById("file");
+  const file = fileInput.files[0];
+  const progressBarContainer = document.getElementById("progressBarContainer");
+  const progressBar = document.getElementById("progressBar");
 
-        progressBarContainer.style.display = "block";
-        progressBar.style.width = "0%";
+  progressBarContainer.style.display = "block";
+  progressBar.style.width = "0%";
 
-        const postData = {
-          comment: comment,
-          timestamp: new Date(),
-          username: userDoc.exists() ? userDoc.data().username : "Unknown",
-        };
+  const postData = {
+    comment: comment,
+    timestamp: new Date(),
+    username: userDoc.exists() ? userDoc.data().username : "Unknown",
+  };
 
-        // 位置情報が取得できていれば投稿データに追加
-        if (userLocation) {
-          postData.location = {
-            latitude: userLocation.coords.latitude,
-            longitude: userLocation.coords.longitude,
-          };
-        }
+  // 位置情報が取得できていれば投稿データに追加
+  if (userLocation) {
+    postData.location = {
+      latitude: userLocation.coords.latitude,
+      longitude: userLocation.coords.longitude,
+    };
+  }
 
-        if (file) {
-          const fileRef = ref(storage, `posts/${file.name}`);
-          const uploadTask = uploadBytesResumable(fileRef, file);
+  if (file) {
+    const fileRef = ref(storage, `posts/${file.name}`);
+    const uploadTask = uploadBytesResumable(fileRef, file);
 
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              progressBar.style.width = progress + "%";
-            },
-            (error) => {
-              console.error("アップロードエラー: ", error);
-              progressBarContainer.style.display = "none";
-            },
-            async () => {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              postData.fileUrl = downloadURL;
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        progressBar.style.width = progress + "%";
+      },
+      (error) => {
+        console.error("アップロードエラー: ", error);
+        progressBarContainer.style.display = "none";
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref());
+        postData.fileUrl = downloadURL;
 
-              await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-              fileInput.value = '';
-              document.getElementById("comment").value = '';
-              loadPosts();
-              progressBarContainer.style.display = "none";
-            }
-          );
-        } else {
-          await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-          loadPosts();
-        }
-      });
+        await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+        fileInput.value = '';
+        document.getElementById("comment").value = '';
+        loadPosts();
+        progressBarContainer.style.display = "none";
+      }
+    );
+  } else {
+    await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+    loadPosts();
+  }
 
+  // カメラで動画撮影
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+  const videoElement = document.createElement('video');
+  videoElement.srcObject = stream;
+  videoElement.play();
+
+  const recorder = new MediaRecorder(stream);
+  let videoChunks = [];
+
+  recorder.ondataavailable = (event) => {
+    videoChunks.push(event.data);
+  };
+
+  recorder.onstop = async () => {
+    const videoBlob = new Blob(videoChunks, { type: 'video/mp4' });
+    const videoFile = new File([videoBlob], 'video.mp4', { type: 'video/mp4' });
+
+    // Firebase Storageに動画をアップロード
+    const videoRef = ref(storage, `posts/video-${new Date().toISOString()}.mp4`);
+    const uploadTask = uploadBytesResumable(videoRef, videoFile);
+
+    uploadTask.on('state_changed',
+      (snapshot) => {
+        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        progressBar.style.width = progress + "%";
+      },
+      (error) => {
+        console.error("アップロードエラー: ", error);
+        progressBarContainer.style.display = "none";
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref());
+        postData.videoUrl = downloadURL;
+
+        await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+        loadPosts();
+        progressBarContainer.style.display = "none";
+      }
+    );
+
+    // 1分後に録画停止
+    setTimeout(() => {
+      recorder.stop();
+      stream.getTracks().forEach(track => track.stop());
+    }, 60000);  // 1分
+  };
+
+  recorder.start();
+});
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
         const postsSnapshot = await getDocs(postsCollection);
