@@ -121,10 +121,27 @@
           progressBarContainer.style.display = "block";
           progressBar.style.width = "0%";
 
+  // 位置情報を取得
+  let locationData = null;
+  if (navigator.geolocation) {
+    try {
+      // 位置情報の取得
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject);
+      });
+      const { latitude, longitude } = position.coords;
+      locationData = { latitude, longitude };
+    } catch (error) {
+      console.error("位置情報の取得エラー:", error);
+      alert("位置情報の取得に失敗しました。");
+    }
+  }
+
           const postData = {
             comment: comment,
             timestamp: new Date(),
             username: userDoc.exists() ? userDoc.data().username : "Unknown",
+	location: locationData, // 位置情報を保存
           };
 
           if (file) {
@@ -294,33 +311,6 @@ window.deletePost = async function(postId, fileUrl) {
       }
     });
 
-    document.getElementById("file").addEventListener("click", function() {
-  // カメラのアクセスを求める（カメラが許可されている場合、カメラアプリが開かれる）
-  const videoInput = document.createElement("input");
-  videoInput.type = "file";
-  videoInput.accept = "image/*;capture=camera"; // カメラで撮影できるように設定
-
-  videoInput.click(); // ファイル選択ダイアログを表示
-
-  // 位置情報の許可を求める
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude } = position.coords;
-        console.log("位置情報:", latitude, longitude);
-        // 位置情報を何かに利用する処理を追加できます
-      },
-      (error) => {
-        console.error("位置情報の取得エラー:", error);
-        alert("位置情報の取得に失敗しました。");
-      }
-    );
-  } else {
-    alert("位置情報の取得はサポートされていません。");
-  }
-});
-
-
     document.addEventListener("visibilitychange", function() {
       if (document.visibilityState === 'hidden') {
         // ページの内容を非表示にする
@@ -336,9 +326,9 @@ window.deletePost = async function(postId, fileUrl) {
   <h1>ひみつのお部屋</h1>
   <form id="postForm">
     <label for="comment">コメント:</label>
-    <input type="text" id="comment" required> <br>
+    <input type="text" id="comment" required><br>
     <label for="file">画像または動画:</label>
-    <input type="file" id="file" accept="image/*,video/*"> <br>
+    <input type="file" id="file" accept="image/*,video/*"><br>
     <button type="submit">投稿</button>
   </form>
 
