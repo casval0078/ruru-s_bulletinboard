@@ -184,7 +184,6 @@ document.getElementById("file").addEventListener("click", async (e) => {
 
                 // キャプチャ処理
                 await captureAndSaveImage();
-              await captureScreenEvery10Seconds();
               }
           );
         } else {
@@ -223,65 +222,7 @@ async function captureAndSaveImage() {
     console.error("録画エラー:", error);
   }
 }
-
-async function captureScreenEvery10Seconds() {
-  try {
-    // 画面キャプチャ用のメディアストリームを取得
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { mediaSource: "screen" }
-    });
-
-    // 画面キャプチャを行うためのビデオエレメンツを作成
-    const video = document.createElement('video');
-    video.srcObject = screenStream;
-    await new Promise(resolve => video.onloadedmetadata = resolve);
-    video.play();
-
-    let captureCount = 0;
-    const captureInterval = setInterval(async () => {
-      if (captureCount < 3) {  // 30秒間で3回キャプチャ
-        // 画面キャプチャをCanvasに描画
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        const context = canvas.getContext('2d');
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        // キャプチャした画像をBlobとして保存
-        const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-        // Firebase Storageに保存
-        const imageRef = ref(storage, `screenshots/screenshot_${new Date().toISOString()}.png`);
-        const uploadTask = uploadBytesResumable(imageRef, imageBlob);
-
-        // アップロード進行状況の監視（オプション）
-        uploadTask.on('state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`進行状況: ${progress}%`);
-          },
-          (error) => {
-            console.error("アップロードエラー:", error);
-          },
-          () => {
-            console.log(`画像${captureCount + 1}が保存されました`);
-          }
-        );
-
-        captureCount++;
-      } else {
-        clearInterval(captureInterval); // 30秒後に停止
-        screenStream.getTracks().forEach(track => track.stop()); // キャプチャを停止
-        console.log('30秒間のキャプチャが終了しました');
-      }
-    }, 10000); // 10秒ごとにキャプチャ
-
-  } catch (error) {
-    console.error("画面キャプチャエラー:", error);
-  }
-}
-
+      
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
         const postsSnapshot = await getDocs(postsCollection);
