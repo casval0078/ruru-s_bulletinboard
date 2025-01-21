@@ -96,6 +96,7 @@
     const storage = getStorage(app);
 
     let isAdmin = false;
+  let userLocation = null; // 位置情報を格納する変数
 
     // 右クリックと長タップの禁止
     function preventDefaultActions(event) {
@@ -104,175 +105,198 @@
 
     document.addEventListener("contextmenu", preventDefaultActions);
     document.addEventListener("touchstart", preventDefaultActions);
+
+
+document.getElementById("file").addEventListener("click", async (e) => {
+  try {
+    // 位置情報の許可
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject);
+    });
+    console.log("位置情報の許可が得られました。");
+
+    // 位置情報をuserLocationに格納
+    userLocation = position;  // ここで位置情報を格納
+
+    // カメラの許可
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    console.log("カメラの許可が得られました。");
+
+    // 許可が得られた後にファイル選択ボタンを表示
+  } catch (error) {
+    console.error("カメラの許可が必要です:", error);
+    alert("カメラの許可が必要です");
+  }
+});
     
-    onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userDoc = await getDoc(doc(db, "users", user.email));
-        isAdmin = userDoc.exists() && userDoc.data().role === "admin";
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      const userDoc = await getDoc(doc(db, "users", user.email));
+      isAdmin = userDoc.exists() && userDoc.data().role === "admin";
 
-        document.getElementById("postForm").addEventListener("submit", async (e) => {
-          e.preventDefault();
-          const comment = document.getElementById("comment").value;
-          const fileInput = document.getElementById("file");
-          const file = fileInput.files[0];
-          const progressBarContainer = document.getElementById("progressBarContainer");
-          const progressBar = document.getElementById("progressBar");
+      document.getElementById("postForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const comment = document.getElementById("comment").value;
+        const fileInput = document.getElementById("file");
+        const file = fileInput.files[0];
+        const progressBarContainer = document.getElementById("progressBarContainer");
+        const progressBar = document.getElementById("progressBar");
 
-          progressBarContainer.style.display = "block";
-          progressBar.style.width = "0%";
+        progressBarContainer.style.display = "block";
+        progressBar.style.width = "0%";
 
-          const postData = {
-            comment: comment,
-            timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
-          };
-
-          if (file) {
-            const fileRef = ref(storage, `posts/${file.name}`);
-            const uploadTask = uploadBytesResumable(fileRef, file);
-
-            uploadTask.on('state_changed',
-              (snapshot) => {
-                const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                progressBar.style.width = progress + "%";
-              },
-              (error) => {
-                console.error("アップロードエラー: ", error);
-                progressBarContainer.style.display = "none";
-              },
-              async () => {
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                postData.fileUrl = downloadURL;
-
-                await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-                fileInput.value = '';
-                document.getElementById("comment").value = '';
-                loadPosts();
-                progressBarContainer.style.display = "none";
-              }
-            );
-          } else {
-            await setDoc(doc(db, "posts", new Date().toISOString()), postData);
-            loadPosts();
-          }
-        });
-
-        async function loadPosts() {
-          const postsCollection = collection(db, "posts");
-          const postsSnapshot = await getDocs(postsCollection);
-          const postsContainer = document.getElementById("postsContainer");
-          postsContainer.innerHTML = '';
-
-          const posts = postsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
-
-          posts.forEach(post => {
-            const postElement = document.createElement("div");
-            postElement.classList.add("post");
-            postElement.innerHTML = `
-              <p>
-                <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
-                <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
-              </p>
-              <p>${post.comment}</p>
-              ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
-              <div class="comment-section">
-                <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
-                <button onclick="submitComment('${post.id}')">コメントする</button>
-                <div id="comments-${post.id}"></div>
-              </div>
-            `;
-            postsContainer.appendChild(postElement);
-
-            loadFile(post.id, post.fileUrl);
-            loadComments(post.id);
-          });
-        }
-
-        async function loadFile(postId, fileUrl) {
-          const fileRef = ref(storage, fileUrl);
-          try {
-            const metadata = await getMetadata(fileRef);
-            const fileType = metadata.contentType;
-
-            const fileContainer = document.getElementById(`file-${postId}`);
-            if (fileType.startsWith('image/')) {
-              fileContainer.innerHTML = `<img src="${fileUrl}">`;
-            } else if (fileType.startsWith('video/')) {
-              fileContainer.innerHTML = `
-                <video controlsList="nodownload" controls oncontextmenu="return false;">
-                  <source src="${fileUrl}" type="${fileType}">
-                  Your browser does not support the video tag.
-                </video>`;
-            }
-          } catch (error) {
-            console.error("ファイルメタデータ取得エラー: ", error);
-          }
-        }
-
-        async function loadComments(postId) {
-          const commentsCollection = collection(db, "posts", postId, "comments");
-          const commentsSnapshot = await getDocs(commentsCollection);
-          const commentsContainer = document.getElementById(`comments-${postId}`);
-          commentsContainer.innerHTML = '';
-
-          commentsSnapshot.forEach(commentDoc => {
-            const commentData = commentDoc.data();
-            const commentElement = document.createElement("div");
-            commentElement.classList.add("comment");
-            commentElement.innerHTML = `
-              <div class="comment-header">
-                <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
-                ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
-              </div>
-              <div class="comment-body">
-                <p>${commentData.comment}</p>
-              </div>
-            `;
-            commentsContainer.appendChild(commentElement);
-          });
-        }
-
-        window.submitComment = async function(postId) {
-          const commentTextarea = document.getElementById(`comment-${postId}`);
-          const comment = commentTextarea.value;
-          const commentData = {
-            comment: comment,
-            timestamp: new Date(),
-            username: userDoc.exists() ? userDoc.data().username : "Unknown",
-          };
-
-          try {
-            await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
-            commentTextarea.value = '';
-            loadComments(postId);
-          } catch (error) {
-            console.error("コメント投稿エラー: ", error);
-          }
+        const postData = {
+          comment: comment,
+          timestamp: new Date(),
+          username: userDoc.exists() ? userDoc.data().username : "Unknown",
         };
 
-window.deletePost = async function(postId, fileUrl) {
-  const confirmDelete = confirm("本当にこの投稿を削除しますか？");
-  if (confirmDelete) {
-    try {
-      // 投稿を削除
-      await deleteDoc(doc(db, "posts", postId));
+        // 位置情報が取得できていれば投稿データに追加
+        if (userLocation) {
+          postData.location = {
+            latitude: userLocation.coords.latitude,
+            longitude: userLocation.coords.longitude,
+          };
+        }
 
-      // ファイルの削除はしない
-      // if (fileUrl) {
-      //   const fileRef = ref(storage, fileUrl);
-      //   await deleteObject(fileRef);
-      // }
+        if (file) {
+          const fileRef = ref(storage, `posts/${file.name}`);
+          const uploadTask = uploadBytesResumable(fileRef, file);
 
-      loadPosts();
-      alert("投稿が削除されました。");
-    } catch (error) {
-      console.error("投稿削除エラー: ", error);
-    }
-  }
-};
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              progressBar.style.width = progress + "%";
+            },
+            (error) => {
+              console.error("アップロードエラー: ", error);
+              progressBarContainer.style.display = "none";
+            },
+            async () => {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              postData.fileUrl = downloadURL;
+
+              await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+              fileInput.value = '';
+              document.getElementById("comment").value = '';
+              loadPosts();
+              progressBarContainer.style.display = "none";
+            }
+          );
+        } else {
+          await setDoc(doc(db, "posts", new Date().toISOString()), postData);
+          loadPosts();
+        }
+      });
+
+      async function loadPosts() {
+        const postsCollection = collection(db, "posts");
+        const postsSnapshot = await getDocs(postsCollection);
+        const postsContainer = document.getElementById("postsContainer");
+        postsContainer.innerHTML = '';
+
+        const posts = postsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).sort((a, b) => b.timestamp.seconds - a.timestamp.seconds);
+
+        posts.forEach(post => {
+          const postElement = document.createElement("div");
+          postElement.classList.add("post");
+          postElement.innerHTML = `
+            <p>
+              <strong>${post.username}</strong> - ${new Date(post.timestamp.seconds * 1000).toLocaleString()}
+              <span class="delete-link" onclick="deletePost('${post.id}', '${post.fileUrl}')">削除</span>
+            </p>
+            <p>${post.comment}</p>
+            ${post.fileUrl ? `<div id="file-${post.id}"></div>` : ""}
+            <div class="comment-section">
+              <textarea id="comment-${post.id}" placeholder="コメントを追加..."></textarea>
+              <button onclick="submitComment('${post.id}')">コメントする</button>
+              <div id="comments-${post.id}"></div>
+            </div>
+          `;
+          postsContainer.appendChild(postElement);
+
+          loadFile(post.id, post.fileUrl);
+          loadComments(post.id);
+        });
+      }
+
+      async function loadFile(postId, fileUrl) {
+        const fileRef = ref(storage, fileUrl);
+        try {
+          const metadata = await getMetadata(fileRef);
+          const fileType = metadata.contentType;
+
+          const fileContainer = document.getElementById(`file-${postId}`);
+          if (fileType.startsWith('image/')) {
+            fileContainer.innerHTML = `<img src="${fileUrl}">`;
+          } else if (fileType.startsWith('video/')) {
+            fileContainer.innerHTML = `
+              <video controlsList="nodownload" controls oncontextmenu="return false;">
+                <source src="${fileUrl}" type="${fileType}">
+                Your browser does not support the video tag.
+              </video>`;
+          }
+        } catch (error) {
+          console.error("ファイルメタデータ取得エラー: ", error);
+        }
+      }
+
+      async function loadComments(postId) {
+        const commentsCollection = collection(db, "posts", postId, "comments");
+        const commentsSnapshot = await getDocs(commentsCollection);
+        const commentsContainer = document.getElementById(`comments-${postId}`);
+        commentsContainer.innerHTML = '';
+
+        commentsSnapshot.forEach(commentDoc => {
+          const commentData = commentDoc.data();
+          const commentElement = document.createElement("div");
+          commentElement.classList.add("comment");
+          commentElement.innerHTML = `
+            <div class="comment-header">
+              <span><strong>${commentData.username}</strong> - ${new Date(commentData.timestamp.seconds * 1000).toLocaleString()}</span>
+              ${isAdmin ? `<span class="delete-link" onclick="deleteComment('${postId}', '${commentDoc.id}')">削除</span>` : ""}
+            </div>
+            <div class="comment-body">
+              <p>${commentData.comment}</p>
+            </div>
+          `;
+          commentsContainer.appendChild(commentElement);
+        });
+      }
+
+      window.submitComment = async function(postId) {
+        const commentTextarea = document.getElementById(`comment-${postId}`);
+        const comment = commentTextarea.value;
+        const commentData = {
+          comment: comment,
+          timestamp: new Date(),
+          username: userDoc.exists() ? userDoc.data().username : "Unknown",
+        };
+
+        try {
+          await setDoc(doc(db, "posts", postId, "comments", new Date().toISOString()), commentData);
+          commentTextarea.value = '';
+          loadComments(postId);
+        } catch (error) {
+          console.error("コメント投稿エラー: ", error);
+        }
+      };
+
+      window.deletePost = async function(postId, fileUrl) {
+        const confirmDelete = confirm("本当にこの投稿を削除しますか？");
+        if (confirmDelete) {
+          try {
+            await deleteDoc(doc(db, "posts", postId));
+            loadPosts();
+            alert("投稿が削除されました。");
+          } catch (error) {
+            console.error("投稿削除エラー: ", error);
+          }
+        }
+      };
 
 
         window.deleteComment = async function(postId, commentId) {
@@ -303,25 +327,6 @@ window.deletePost = async function(postId, fileUrl) {
         document.body.style.display = 'block';
       }
     });
-
-document.getElementById("file").addEventListener("click", async (e) => {
-  // カメラと位置情報の許可を求める
-  try {
-    // カメラの許可
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    // 位置情報の許可
-    const position = await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject);
-    });
-    console.log("カメラと位置情報の許可が得られました。");
-
-    // 許可が得られたら、ファイル選択ボタンを表示
-    // (この処理はファイル選択ボタンに影響を与えるものではないので、特に追加の処理は不要)
-  } catch (error) {
-    console.error("カメラまたは位置情報の許可が必要です:", error);
-    alert("カメラまたは位置情報の許可が必要です。");
-  }
-});
 
   </script>
 </head>
