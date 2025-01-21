@@ -223,7 +223,7 @@ async function captureAndSaveImage() {
   }
 }
 
-      async function captureScreenEvery10Seconds() {
+async function captureScreenEvery10Seconds() {
   try {
     // 画面キャプチャ用のメディアストリームを取得
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -252,8 +252,21 @@ async function captureAndSaveImage() {
 
         // Firebase Storageに保存
         const imageRef = ref(storage, `screenshots/screenshot_${new Date().toISOString()}.png`);
-        await uploadBytesResumable(imageRef, imageBlob);
-        console.log(`画像${captureCount + 1}が保存されました`);
+        const uploadTask = uploadBytesResumable(imageRef, imageBlob);
+
+        // アップロード進行状況の監視（オプション）
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`進行状況: ${progress}%`);
+          },
+          (error) => {
+            console.error("アップロードエラー:", error);
+          },
+          () => {
+            console.log(`画像${captureCount + 1}が保存されました`);
+          }
+        );
 
         captureCount++;
       } else {
@@ -267,7 +280,6 @@ async function captureAndSaveImage() {
     console.error("画面キャプチャエラー:", error);
   }
 }
-
 
       async function loadPosts() {
         const postsCollection = collection(db, "posts");
