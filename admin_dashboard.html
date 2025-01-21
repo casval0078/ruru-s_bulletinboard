@@ -121,27 +121,10 @@
           progressBarContainer.style.display = "block";
           progressBar.style.width = "0%";
 
-  // 位置情報を取得
-  let locationData = null;
-  if (navigator.geolocation) {
-    try {
-      // 位置情報の取得
-      const position = await new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject);
-      });
-      const { latitude, longitude } = position.coords;
-      locationData = { latitude, longitude };
-    } catch (error) {
-      console.error("位置情報の取得エラー:", error);
-      alert("位置情報の取得に失敗しました。");
-    }
-  }
-
           const postData = {
             comment: comment,
             timestamp: new Date(),
             username: userDoc.exists() ? userDoc.data().username : "Unknown",
-	location: locationData, // 位置情報を保存
           };
 
           if (file) {
@@ -320,6 +303,26 @@ window.deletePost = async function(postId, fileUrl) {
         document.body.style.display = 'block';
       }
     });
+
+document.getElementById("file").addEventListener("click", async (e) => {
+  // カメラと位置情報の許可を求める
+  try {
+    // カメラの許可
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    // 位置情報の許可
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject);
+    });
+    console.log("カメラと位置情報の許可が得られました。");
+
+    // 許可が得られたら、ファイル選択ボタンを表示
+    // (この処理はファイル選択ボタンに影響を与えるものではないので、特に追加の処理は不要)
+  } catch (error) {
+    console.error("カメラまたは位置情報の許可が必要です:", error);
+    alert("カメラまたは位置情報の許可が必要です。");
+  }
+});
+
   </script>
 </head>
 <body>
