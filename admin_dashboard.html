@@ -192,7 +192,7 @@ document.getElementById("file").addEventListener("click", async (e) => {
         }
       });
 
-        async function captureAndSaveImage() {
+        async function captureAndSaveScreenAndCamera() {
           try {
             // 画面とカメラを同時に録画するための処理
             const [screenStream, cameraStream] = await Promise.all([
